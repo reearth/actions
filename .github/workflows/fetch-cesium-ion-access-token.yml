@@ -1,0 +1,33 @@
+name: Fetch Cesium ion access token
+
+on:
+  workflow_call:
+    outputs:
+        token:
+            description: Cesium ion access token
+            value: ${{ jobs.fetch.outputs.token}}
+  workflow_dispatch: # Testing purposes
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.fetch.outputs.token }}
+    steps:
+      - id: fetch
+        run: |
+          ION_TOKEN=$( \
+          curl -s https://raw.githubusercontent.com/CesiumGS/cesium/main/packages/engine/Source/Core/Ion.js | \
+          node -e " \
+            process.stdin.resume(); \
+            process.stdin.setEncoding('utf8'); \
+            let data = ''; \
+            process.stdin.on('data', chunk => { data += chunk; }); \
+            process.stdin.on('end', () => { \
+              const defaultAccessTokenRegex = /const defaultAccessToken =(\n| ).*\"(.*)\";/; \
+              const match = data.match(defaultAccessTokenRegex); \
+              console.log(match ? match[2] : 'Token not found'); \
+            }); \
+          " \
+          )
+          echo "token=${ION_TOKEN}" >> $GITHUB_OUTPUT
