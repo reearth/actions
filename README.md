@@ -1,3 +1,3 @@
-# Workflows
+# Actions
 
-> Collection of reusable workflows for GitHub Actions.
+> Collection of opinionated actions and reusable workflows for GitHub Actions.

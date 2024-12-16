@@ -1,22 +1,18 @@
-name: Fetch Cesium ion access token
+name: Update Cesium ion token
+description: Fetches a new Cesium ion token and updates the Google Cloud Secret Manager secret
+inputs:
+  secret:
+    description: Name of the Google Cloud Secret Manager secret
+    required: true
 
-on:
-  workflow_call:
-    outputs:
-        token:
-            description: Cesium ion access token
-            value: ${{ jobs.fetch.outputs.token}}
-  workflow_dispatch: # Testing purposes
-
-jobs:
-  fetch:
-    runs-on: ubuntu-latest
-    outputs:
-      token: ${{ steps.fetch.outputs.token }}
-    steps:
-      - id: fetch
-        run: |
-          ION_TOKEN=$( \
+runs:
+  using: composite
+  steps:
+    - name: Fetch Cesium ion token
+      id: fetch
+      shell: bash
+      run: |
+        ION_TOKEN=$( \
           curl -s https://raw.githubusercontent.com/CesiumGS/cesium/main/packages/engine/Source/Core/Ion.js | \
           node -e " \
             process.stdin.resume(); \
@@ -29,5 +25,9 @@ jobs:
               console.log(match ? match[2] : 'Token not found'); \
             }); \
           " \
-          )
-          echo "token=${ION_TOKEN}" >> $GITHUB_OUTPUT
+        )
+        echo "token=${ION_TOKEN}" >> $GITHUB_OUTPUT
+
+    - name: Update Secret Manager secret
+      shell: bash
+      run: gcloud secrets versions add ${{ inputs.secret }} --data-file=<(echo "${{ steps.fetch.outputs.token }}")

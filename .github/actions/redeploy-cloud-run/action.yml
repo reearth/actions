@@ -1,0 +1,33 @@
+name: Redeploy Cloud Run service
+description: Create a new revision and traffic split to it
+inputs:
+  key:
+    description: Environment variable name of the Cloud Run service
+    required: false
+    default: REEARTH_CESIUM_ION_TOKEN
+  region:
+    description: Region of the Cloud Run service
+    required: true
+  secret:
+    description: Name of the Secret Manager secret
+    required: true
+  service:
+    description: Name of the Cloud Run service
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Update Cloud Run
+      shell: bash
+      run: |
+        gcloud run services update ${{ inputs.service }} \
+          --update-secrets ${{ inputs.key }}=${{ inputs.secret }}:latest \
+          --region ${{ inputs.region }}
+
+    - name: Update Cloud Run traffic
+      shell: bash
+      run: |
+        gcloud run services update-traffic ${{ inputs.service }} \
+          --to-latest \
+          --region ${{ inputs.region }}
