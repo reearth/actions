@@ -1,0 +1,19 @@
+name: Image Retag
+description: Pull container image, create new tag, and then push to target registry.
+inputs:
+  image_source:
+    description: 'The source image to pull.'
+    required: true
+  image_target:
+    description: 'The target image to tag and push.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Pull docker images
+      run: docker pull ${{ inputs.image_source }}
+    - name: Tag docker images
+      run: docker tag ${{ inputs.image_source }} ${{ inputs.image_target }}
+    - name: Push docker images
+      run: docker push ${{ inputs.image_target }}
