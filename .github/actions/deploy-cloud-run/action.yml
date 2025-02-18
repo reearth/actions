@@ -5,13 +5,13 @@ inputs:
     description: Region of the Cloud Run service
     required: true
   image:
-    description: Image nmae
+    description: Image name
     required: true
   service:
     description: Name of the Cloud Run service
     required: true
   health_check_url:
-    description: Health check URL. If not provided, health check will be skipped
+    description: Health check URL. Multiple URLs can be separated by line breaks. If not provided, health check will be skipped.
 
 runs:
   using: composite
@@ -31,7 +31,7 @@ runs:
     - name: Deploy
       shell: bash
       run: |
-        gcloud run deploy "{{ inputs.service }}" \
+        gcloud run deploy "${{ inputs.service }}" \
           --image "${{ inputs.image }}" \
           --region "${{ inputs.region }}" \
           --platform managed \
@@ -45,18 +45,22 @@ runs:
           --to-latest \
           --region "${{ inputs.region }}"
 
+    # if the URL is invalid, curl itself will return an error code
     - name: Health check
       id: health_check
       if: ${{ inputs.health_check_url }}
       shell: bash
       run: |
-        RESULT=`curl -s -o /dev/null -w "%{http_code}" "${{ inputs.health_check_url }}"`
-        echo "Status code is $RESULT"
-        echo "status_code=$RESULT" >> "$GITHUB_OUTPUT"
-        if [ $RESULT -ge 300 ]; then
-          echo "Health check failed"
-          echo "error=true" >> "$GITHUB_OUTPUT"
-        fi
+        for url in ${{ inputs.health_check_url }}; do
+          echo "Checking health of $url"
+          RESULT=`curl -m 10 -s -o /dev/null -w "%{http_code}" "$url"`
+          echo "Status code is $RESULT"
+          if [ $RESULT -ge 300 ]; then
+            echo "Health check failed"
+            echo "error=true" >> "$GITHUB_OUTPUT"
+            break
+          fi
+        done
 
     - name: Rollback
       if: ${{ steps.health_check.outputs.error }}
