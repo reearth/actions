@@ -63,7 +63,7 @@ runs:
         done
 
     - name: Rollback
-      if: ${{ steps.health_check.outputs.error }}
+      if: ${{ steps.health_check.outputs.error && steps.get_revision.outputs.revision }}
       shell: bash
       run: |
         gcloud run services update-traffic "${{ inputs.service }}" \
