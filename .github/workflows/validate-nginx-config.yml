@@ -2,23 +2,38 @@ name: Validate Nginx Configuration
 on:
   workflow_call:
     inputs:
+      port:
+        default: 8080
+        description: 'Nginx container port number.'
+        required: true
+        type: number
+      realipheader:
+        default: 'X-Forwarded-For' # Ref: https://cloud.google.com/load-balancing/docs/https#target-proxies
+        description: 'Nginx real IP header.'
+        required: true
+        type: string
+      templatedir: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
+        description: 'Nginx configuration template directory. Usually have files with .template extension.'
+        required: true
+        type: string
+      verbose:
+        default: true
+        description: 'Toggle verbose output. By setting this to true, the job will print out the nginx version, nginx config files, and generated config files.'
+        required: false
+        type: boolean
       workdir:
         default: 'web'
         description: 'Default working directory to run the job.'
         required: true
-        type: string
-      templatedir: # see - https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
-        description: 'Nginx configuration template directory. Usually have files with .template extension.'
-        required: true
-        type: string
+        type: string  
 
 jobs:
   validate-nginx-config:
     name: validate-nginx-config
     runs-on: ubuntu-latest
     env:
-      PORT: ${{ vars.WEB_PORT }}
-      REAL_IP_HEADER: ${{ vars.WEB_REAL_IP_HEADER }}
+      PORT: ${{ inputs.port }}
+      REAL_IP_HEADER: ${{ inputs.realipheader }}
       NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.templatedir}}
     defaults:
       run:
@@ -27,13 +42,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: check Nginx version
         run: sudo nginx -v
+        if: ${{ inputs.verbose }}
       - name: list Nginx config template directory
         run: ls -l ${{ env.NGINX_ENVSUBST_TEMPLATE_DIR }} /etc/nginx/ /etc/nginx/conf.d/
+        if: ${{ inputs.verbose }}
       - name: download Nginx envsubst script
         run: curl -s -O https://raw.githubusercontent.com/nginxinc/docker-nginx/2879b26c7dedf1d958b1894a5c1b1dec3c026369/entrypoint/20-envsubst-on-templates.sh && chmod +x 20-envsubst-on-templates.sh
       - name: envsubst Nginx config
         run: sudo --preserve-env ./20-envsubst-on-templates.sh
       - name: check generated config files
         run: ls -l /etc/nginx/conf.d/
+        if: ${{ inputs.verbose }}
+      - name: Printout nginx config files
+        run: cat /etc/nginx/nginx.conf
+        if: ${{ inputs.verbose }}
+      - name: Printout generated config files
+        run: cat /etc/nginx/conf.d/*
+        if: ${{ inputs.verbose }}
       - name: test Nginx configuration
         run: sudo nginx -t
