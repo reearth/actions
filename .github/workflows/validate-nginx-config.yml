@@ -7,11 +7,6 @@ on:
         description: 'Custom template values in JSON format to be passed to the environment variables. The key and value can be used in the Nginx configuration template files.'
         required: false
         type: string
-      port:
-        default: 8080
-        description: 'Nginx container port number.'
-        required: false
-        type: number
       templatedir: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
         description: 'Nginx configuration template directory. Usually have files with .template extension.'
         required: true
@@ -32,7 +27,6 @@ jobs:
     name: validate-nginx-config
     runs-on: ubuntu-latest
     env:
-      PORT: ${{ inputs.port }}
       NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.templatedir}}
     defaults:
       run:
@@ -42,14 +36,14 @@ jobs:
       - name: check Nginx version
         run: sudo nginx -v
         if: ${{ inputs.verbose }}
-      - name: Parse custom headers and export as environment variables
+      - name: Parse custom template values and export as environment variables
         run: |
-          # Check if custom_headers is set
-          if [ -n "${{ inputs.custom_headers }}" ] && [ "${{ inputs.custom_headers }}" != "{}" ]; then
-            echo "Parsing custom headers: ${{ inputs.custom_headers }}"
+          # Check if custom_template_values is set
+          if [ -n "${{ inputs.custom_template_values }}" ] && [ "${{ inputs.custom_template_values }}" != "{}" ]; then
+            echo "Parsing custom headers: ${{ inputs.custom_template_values }}"
             
             # Parse and export each key-value pair as an environment variable
-            echo '${{ inputs.custom_headers }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
+            echo '${{ inputs.custom_template_values }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
                 # Replace hyphens with underscores to make it a valid environment variable name
                 env_var_name=$(echo "$key" | tr '-' '_')
                 echo "Exporting: $env_var_name=$value"
@@ -62,7 +56,9 @@ jobs:
         run: ls -l ${{ env.NGINX_ENVSUBST_TEMPLATE_DIR }} /etc/nginx/ /etc/nginx/conf.d/
         if: ${{ inputs.verbose }}
       - name: download Nginx envsubst script
-        run: curl -s -O https://raw.githubusercontent.com/nginxinc/docker-nginx/2879b26c7dedf1d958b1894a5c1b1dec3c026369/entrypoint/20-envsubst-on-templates.sh && chmod +x 20-envsubst-on-templates.sh
+        run: |
+          curl -s -O https://raw.githubusercontent.com/nginxinc/docker-nginx/2879b26c7dedf1d958b1894a5c1b1dec3c026369/entrypoint/20-envsubst-on-templates.sh 
+          chmod +x 20-envsubst-on-templates.sh
       - name: envsubst Nginx config
         run: sudo --preserve-env ./20-envsubst-on-templates.sh
       - name: check generated config files
