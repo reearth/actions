@@ -2,7 +2,7 @@ name: Validate Nginx Configuration
 on:
   workflow_call:
     inputs:
-      custom_template_values:
+      template_values:
         default: '{}'
         description: 'Custom template values in JSON format to be passed to the environment variables. The key and value can be used in the Nginx configuration template files.'
         required: false
@@ -38,12 +38,12 @@ jobs:
         if: ${{ inputs.verbose }}
       - name: Parse custom template values and export as environment variables
         run: |
-          # Check if custom_template_values is set
-          if [ -n "${{ inputs.custom_template_values }}" ] && [ "${{ inputs.custom_template_values }}" != "{}" ]; then
-            echo "Parsing custom headers: ${{ inputs.custom_template_values }}"
+          # Check if template_values is set
+          if [ -n "${{ inputs.template_values }}" ] && [ "${{ inputs.template_values }}" != "{}" ]; then
+            echo "Parsing custom headers: ${{ inputs.template_values }}"
             
             # Parse and export each key-value pair as an environment variable
-            echo '${{ inputs.custom_template_values }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
+            echo '${{ inputs.template_values }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
                 # Replace hyphens with underscores to make it a valid environment variable name
                 env_var_name=$(echo "$key" | tr '-' '_')
                 echo "Exporting: $env_var_name=$value"
