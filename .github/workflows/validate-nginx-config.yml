@@ -2,16 +2,15 @@ name: Validate Nginx Configuration
 on:
   workflow_call:
     inputs:
+      custom_headers:
+        description: 'Custom headers to be passed to the Nginx configuration via environment variables.'
+        required: false
+        type: string
       port:
         default: 8080
         description: 'Nginx container port number.'
-        required: true
+        required: false
         type: number
-      realipheader:
-        default: 'X-Forwarded-For' # Ref: https://cloud.google.com/load-balancing/docs/https#target-proxies
-        description: 'Nginx real IP header.'
-        required: true
-        type: string
       templatedir: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
         description: 'Nginx configuration template directory. Usually have files with .template extension.'
         required: true
@@ -33,7 +32,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PORT: ${{ inputs.port }}
-      REAL_IP_HEADER: ${{ inputs.realipheader }}
       NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.templatedir}}
     defaults:
       run:
@@ -43,6 +41,22 @@ jobs:
       - name: check Nginx version
         run: sudo nginx -v
         if: ${{ inputs.verbose }}
+      - name: Parse custom headers and export as environment variables
+        run: |
+          # Check if custom_headers is set
+          if [ -n "${{ inputs.custom_headers }}" ] && [ "${{ inputs.custom_headers }}" != "{}" ]; then
+            echo "Parsing custom headers: ${{ inputs.custom_headers }}"
+            
+            # Parse and export each key-value pair as an environment variable
+            echo '${{ inputs.custom_headers }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
+                # Replace hyphens with underscores to make it a valid environment variable name
+                env_var_name=$(echo "$key" | tr '-' '_')
+                echo "Exporting: $env_var_name=$value"
+                echo "$env_var_name=$value" >> $GITHUB_ENV
+            done
+          else
+            echo "No custom headers provided."
+          fi
       - name: list Nginx config template directory
         run: ls -l ${{ env.NGINX_ENVSUBST_TEMPLATE_DIR }} /etc/nginx/ /etc/nginx/conf.d/
         if: ${{ inputs.verbose }}
