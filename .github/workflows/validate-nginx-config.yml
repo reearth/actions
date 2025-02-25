@@ -2,9 +2,9 @@ name: Validate Nginx Configuration
 on:
   workflow_call:
     inputs:
-      custom_headers:
+      custom_template_values:
         default: '{}'
-        description: 'Custom k/v in JSON format to be passed to the Nginx configuration via environment variables.'
+        description: 'Custom template values in JSON format to be passed to the environment variables. The key and value can be used in the Nginx configuration template files.'
         required: false
         type: string
       port:
