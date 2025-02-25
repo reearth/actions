@@ -10,6 +10,19 @@ on:
         description: Branch to use for release
         required: false
         default: release
+    outputs:
+      sha_short:
+        description: "Short SHA of the commit"
+        value: ${{ jobs.prepare-build.outputs.sha_short }}
+      new_tag:
+        description: "Tag name"
+        value: ${{ jobs.prepare-build.outputs.new_tag }}
+      new_tag_short:
+        description: "Short tag name"
+        value: ${{ jobs.prepare-build.outputs.new_tag_short }}
+      name:
+        description: "Build name (e.g. nightly, rc)"
+        value: ${{ jobs.prepare-build.outputs.name }}
 
 jobs:
   prepare-build:
