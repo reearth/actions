@@ -1,6 +1,10 @@
 on:
   workflow_call:
     inputs:
+      repo:
+        description: "Repository to build (e.g. owner/repo)"
+        required: true
+        type: string
       release_branch:
         type: string
         description: Branch to use for release
@@ -10,6 +14,7 @@ on:
 jobs:
   prepare-build:
     runs-on: ubuntu-latest
+    if: ${{ github.repository == inputs.repo && github.event_name == 'push' && (github.ref_name == 'release' || !startsWith(github.event.head_commit.message, 'v')) }}
     outputs:
       sha_short: ${{ steps.info.outputs.sha_short }}
       new_tag: ${{ steps.info.outputs.new_tag }}
