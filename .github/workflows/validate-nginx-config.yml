@@ -3,7 +3,8 @@ on:
   workflow_call:
     inputs:
       custom_headers:
-        description: 'Custom headers to be passed to the Nginx configuration via environment variables.'
+        default: '{}'
+        description: 'Custom k/v in JSON format to be passed to the Nginx configuration via environment variables.'
         required: false
         type: string
       port:
