@@ -24,7 +24,7 @@ on:
         value: ${{ jobs.docker.outputs.digest }}
       image:
         description: The full name of the deployed docker image
-        value: ${{ inputs.image }}:${{ jobs.docker.outputs.digest }}
+        value: ${{ inputs.image }}@${{ jobs.docker.outputs.digest }}
     secrets:
       DOCKERHUB_USERNAME:
       DOCKERHUB_TOKEN:
