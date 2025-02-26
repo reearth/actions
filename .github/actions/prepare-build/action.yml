@@ -2,22 +2,33 @@ name: Prepare build
 description: Collect information about the build
 
 inputs:
+  repo:
+    description: Repository name (owner/repo) (prevents execution in different repositories)
+    required: false
+    default: ${{ github.repository }}
+  main_branch:
+    description: Main branch name
+    required: false
+    default: main
   release_branch:
     description: Branch to use for release
     required: false
     default: release
 outputs:
+  build:
+    description: Whether to build
+    value: ${{ steps.info.outputs.build }}
   sha_short:
-    description: "Short SHA of the commit"
+    description: Short SHA of the commit
     value: ${{ steps.info.outputs.sha_short }}
   new_tag:
-    description: "Tag name"
+    description: Tag name
     value: ${{ steps.info.outputs.new_tag }}
   new_tag_short:
-    description: "Short tag name"
+    description: Short tag name
     value: ${{ steps.info.outputs.new_tag_short }}
   name:
-    description: "Build name (e.g. nightly, rc)"
+    description: Build name (e.g. nightly, rc)
     value: ${{ steps.info.outputs.name }}
 
 runs:
@@ -33,11 +44,17 @@ runs:
       id: info
       # The tag name should be retrieved lazily, as tagging may be delayed.
       env:
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        INPUT_REPO: ${{ inputs.repo }}
         BRANCH: ${{ github.head_ref || github.ref_name }}
         RELEASE_BRANCH: ${{ inputs.release_branch }}
+        MAIN_BRANCH: ${{ inputs.main_branch }}
       run: |
         echo "sha_short=$(git rev-parse --short HEAD))" >> "$GITHUB_OUTPUT"
         if [[ "$BRANCH" = "$RELEASE_BRANCH" ]]; then
+          if [[ "$GITHUB_REPOSITORY" = "$INPUT_REPO" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
           TAG=$(git tag --points-at HEAD)
           if [[ ! -z "$TAG" ]]; then
             echo "new_tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -45,14 +62,18 @@ runs:
           else
             echo "name=rc" >> "$GITHUB_OUTPUT"
           fi
-        else
+        elif [[ "$BRANCH" = "$MAIN_BRANCH" ]]; then
+          if [[ "$GITHUB_REPOSITORY" = "$INPUT_REPO" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
           echo "name=nightly" >> "$GITHUB_OUTPUT"
         fi
     - name: Show info
       shell: bash
       env:
+        BUILD: ${{ steps.info.outputs.build }}
         SHA_SHORT: ${{ steps.info.outputs.sha_short }}
         NEW_TAG: ${{ steps.info.outputs.new_tag }}
         NEW_TAG_SHORT: ${{ steps.info.outputs.new_tag_short }}
         NAME: ${{ steps.info.outputs.name }}
-      run: echo "sha_short=$SHA_SHORT, new_tag=$NEW_TAG, new_tag_short=$NEW_TAG_SHORT, name=$NAME"
+      run: echo "build=$BUILD, sha_short=$SHA_SHORT, new_tag=$NEW_TAG, new_tag_short=$NEW_TAG_SHORT, name=$NAME"
