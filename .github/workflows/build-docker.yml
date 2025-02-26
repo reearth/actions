@@ -1,0 +1,80 @@
+on:
+  workflow_call:
+    inputs:
+      image:
+        type: string
+        required: true
+      use_dockerhub:
+        description: Whether to push to DockerHub
+        type: boolean
+      sha_short:
+        type: string
+      new_tag:
+        type: string
+      new_tag_short:
+        type: string
+      name:
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+      DOCKERHUB_TOKEN:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    if: inputs.name || inputs.new_tag
+    env:
+      IMAGE_NAME: ${{ inputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        if: inputs.use_dockerhub
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Get options
+        id: options
+        env:
+          TAG: ${{ inputs.new_tag_short }}
+          NAME: ${{ inputs.name }}
+          SHA: ${{ inputs.sha_short }}
+        run: |
+          if [[ -n $TAG ]]; then
+            VERSION=$TAG
+            TAGS=$IMAGE_NAME:$TAG
+            if [[ ! $TAG =~ '-' ]]; then
+              TAGS+=,${IMAGE_NAME}:${TAG%.*}
+              TAGS+=,${IMAGE_NAME}:${TAG%%.*}
+              TAGS+=,${IMAGE_NAME}:latest
+            fi
+          else
+            VERSION=$SHA
+            TAGS=$IMAGE_NAME:$NAME
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+      - name: Build and push docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./web
+          push: true
+          build-args: |
+            GITHUB_SHA=${{ inputs.sha_short }}
+            VERSION=${{ steps.options.outputs.version }}
+          tags: ${{ steps.options.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
