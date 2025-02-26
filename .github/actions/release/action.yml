@@ -1,0 +1,41 @@
+name: release
+description: Generate CHANGELOG and commit it, and put a tag on the release branch
+
+inputs:
+  gh_app_id:
+    description: "GitHub App ID"
+    required: true
+  gh_app_user:
+    description: "GitHub App User"
+    required: true
+  gh_app_private_key:
+    description: "GitHub App Private Key"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: git config
+      shell: bash
+      run: |
+        git config --global user.name ${{ inputs.gh_app_id  }}
+        git config --global user.email ${{ inputs.gh_app_id }}+${{ inputs.gh_app_user }}[bot]@users.noreply.github.com
+        git config --global pull.rebase false
+    - uses: actions/create-github-app-token@v1
+      id: app-token
+      with:
+        app-id: ${{ inputs.gh_app_id }}
+        private-key: ${{ inputs.gh_app_private_key }}
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ steps.app-token.outputs.token }}
+    - name: Checkout release branch
+      shell: bash
+      run: git switch release || git switch -c release
+    - name: Merge main branch to release branch
+      shell: bash
+      run: git merge -X theirs main
+    - name: Git push
+      shell: bash
+      run: git push origin release
