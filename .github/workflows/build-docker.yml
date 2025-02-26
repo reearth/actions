@@ -3,6 +3,7 @@ on:
     inputs:
       image:
         type: string
+        description: The image to deploy without tags
         required: true
       context:
         type: string
@@ -17,6 +18,13 @@ on:
         type: string
       name:
         type: string
+    outputs:
+      digest:
+        description: The digest of the deployed docker image
+        value: ${{ jobs.docker.outputs.digest }}
+      image:
+        description: The full name of the deployed docker image
+        value: ${{ inputs.image }}:${{ jobs.docker.outputs.digest }}
     secrets:
       DOCKERHUB_USERNAME:
       DOCKERHUB_TOKEN:
@@ -28,6 +36,8 @@ permissions:
 jobs:
   docker:
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     if: inputs.name || inputs.new_tag
     env:
       IMAGE_NAME: ${{ inputs.image }}
@@ -51,6 +61,7 @@ jobs:
       - name: Get options
         id: options
         env:
+          IMAGE_NAME: ${{ inputs.image }}
           TAG: ${{ inputs.new_tag_short }}
           NAME: ${{ inputs.name }}
           SHA: ${{ inputs.sha_short }}
@@ -71,6 +82,7 @@ jobs:
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
       - name: Build and push docker image
         uses: docker/build-push-action@v6
+        id: build
         with:
           context: ${{ inputs.context }}
           push: true
