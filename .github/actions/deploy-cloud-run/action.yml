@@ -1,0 +1,55 @@
+name: Deploy to Cloud Run
+description: Deploy to Cloud Run
+inputs:
+  service:
+    description: "The service to deploy"
+  job:
+    description: "The job to deploy"
+  image:
+    description: "The image to deploy"
+    required: true
+  image_internal:
+    description: "The image stored in GAR"
+  region:
+    description: "The region to deploy the Cloud Run service to"
+    required: true
+  service_account:
+    description: "The service account to use for authentication"
+    required: true
+  workload_identity_provider:
+    description: "The workload identity provider to use for authentication"
+    required: true
+  to_latest:
+    description: "Whether to deploy to the latest revision"
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
+      with:
+        service_account: ${{ inputs.service_account }}
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+    - name: Configure docker
+      shell: bash
+      run: gcloud auth configure-docker ${{ inputs.region }}-docker.pkg.dev --quiet
+    - name: docker push
+      shell: bash
+      if: ${{ inputs.image_internal }}
+      run: |
+        docker pull $IMAGE
+        docker tag $IMAGE $IMAGE_INTERNAL
+        docker push $IMAGE_INTERNAL
+      env:
+        IMAGE: ${{ inputs.image }}
+        IMAGE_INTERNAL: ${{ inputs.image_internal }}
+    - name: Deploy to Cloud Run
+      uses: google-github-actions/deploy-cloudrun@v2
+      with:
+        service: ${{ inputs.service }}
+        job: ${{ inputs.job }}
+        image: ${{ inputs.image_gcp || inputs.image }}
+        region: ${{ inputs.region }}
+        revision_traffic: ${{ inputs.to_latest == "true" && "LATEST=100" || "" }}
