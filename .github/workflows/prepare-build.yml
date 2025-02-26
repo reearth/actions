@@ -33,7 +33,7 @@ jobs:
       new_tag_short: ${{ steps.info.outputs.new_tag_short }}
       name: ${{ steps.info.outputs.name }}
     steps:
-      - uses: ./.github/actions/prepare-build
+      - uses: reearth/actions/.github/actions/prepare-build@main
         id: info
         with:
           release_branch: ${{ inputs.release_branch }}
