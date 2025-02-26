@@ -9,16 +9,16 @@ inputs:
 outputs:
   sha_short:
     description: "Short SHA of the commit"
-    value: ${{ jobs.prepare-build.outputs.sha_short }}
+    value: ${{ steps.info.outputs.sha_short }}
   new_tag:
     description: "Tag name"
-    value: ${{ jobs.prepare-build.outputs.new_tag }}
+    value: ${{ steps.info.outputs.new_tag }}
   new_tag_short:
     description: "Short tag name"
-    value: ${{ jobs.prepare-build.outputs.new_tag_short }}
+    value: ${{ steps.info.outputs.new_tag_short }}
   name:
     description: "Build name (e.g. nightly, rc)"
-    value: ${{ jobs.prepare-build.outputs.name }}
+    value: ${{ steps.info.outputs.name }}
 
 runs:
   using: composite
