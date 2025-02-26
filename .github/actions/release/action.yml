@@ -1,41 +1,45 @@
-name: release
-description: Generate CHANGELOG and commit it, and put a tag on the release branch
+name: Release
+description: Generate CHANGELOG, commit, and push to release branch
 
 inputs:
-  gh_app_id:
-    description: "GitHub App ID"
-    required: true
-  gh_app_user:
-    description: "GitHub App User"
-    required: true
-  gh_app_private_key:
-    description: "GitHub App Private Key"
-    required: true
-
+  version:
+    required: false
+    description: A new version ("vX.X.X"), "patch", "minor", "major", "prepatch", "preminor", "premajor", or "prerelease". Default automatically detects a new version from commits.
+    default: minor
 runs:
   using: composite
   steps:
-    - name: git config
+    - name: Set up git config
       shell: bash
       run: |
-        git config --global user.name ${{ inputs.gh_app_id  }}
-        git config --global user.email ${{ inputs.gh_app_id }}+${{ inputs.gh_app_user }}[bot]@users.noreply.github.com
-        git config --global pull.rebase false
-    - uses: actions/create-github-app-token@v1
-      id: app-token
-      with:
-        app-id: ${{ inputs.gh_app_id }}
-        private-key: ${{ inputs.gh_app_private_key }}
-    - uses: actions/checkout@v4
+        git config --global user.name "${{ github.actor }}"
+        git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+    - name: Checkout
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
-        token: ${{ steps.app-token.outputs.token }}
-    - name: Checkout release branch
+    - id: changelog
+      name: Generate CHANGELOG
+      uses: reearth/changelog-action@main
+      with:
+        version: ${{ github.event.inputs.version }}
+        repo: ${{ github.repository }}
+        latest: CHANGELOG_latest.md
+    - name: Upload latest CHANGELOG
+      uses: actions/upload-artifact@v4
+      with:
+        name: changelog-${{ steps.changelog.outputs.version }}
+        path: CHANGELOG_latest.md
+    - name: Commit & push to release
       shell: bash
-      run: git switch release || git switch -c release
-    - name: Merge main branch to release branch
+      env:
+        TAG: ${{ steps.changelog.outputs.version }}
+      run: |
+        rm CHANGELOG_latest.md
+        git add CHANGELOG.md
+        git commit -am "$TAG"
+        git tag $TAG
+        git push --atomic origin release $TAG
+    - name: Commit & push to main
       shell: bash
-      run: git merge -X theirs main
-    - name: Git push
-      shell: bash
-      run: git push origin release
+      run: git switch main && git cherry-pick release && git push
