@@ -1,6 +1,17 @@
 name: Stage
 description: Merge main branch to release branch
 
+inputs:
+  gh_app_id:
+    description: "GitHub App ID"
+    required: true
+  gh_app_user:
+    description: "GitHub App User"
+    required: true
+  gh_app_private_key:
+    description: "GitHub App Private Key"
+    required: true
+
 runs:
   using: composite
   steps:
@@ -14,7 +25,7 @@ runs:
       id: app-token
       with:
         app-id: ${{ inputs.gh_app_id }}
-        private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+        private-key: ${{ inputs.gh_app_private_key }}
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0

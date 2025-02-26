@@ -3,9 +3,12 @@ description: Generate CHANGELOG, commit, and push to release branch
 
 inputs:
   version:
-    required: false
     description: A new version ("vX.X.X"), "patch", "minor", "major", "prepatch", "preminor", "premajor", or "prerelease". Default automatically detects a new version from commits.
-    default: minor
+  gh_app_id:
+    description: "GitHub App ID"
+  gh_app_user:
+    description: "GitHub App User"
+
 runs:
   using: composite
   steps:
