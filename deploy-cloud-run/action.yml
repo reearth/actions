@@ -1,27 +1,39 @@
 name: Deploy to Cloud Run
 description: Deploy to Cloud Run
 inputs:
-  service:
-    description: "The service to deploy"
-  job:
-    description: "The job to deploy"
+  automatic_rollback_enabled:
+    description: "Whether to enable auto rollback"
+    default: "true"
+  blue_green_enabled:
+    description: "Whether to enable blue-green deployment"
+    default: "false"
+  hostname:
+    description: "The hostname to use for the service. Only be used in Host header when sending health check request to the service. Don't include the protocol (http/https)"
+    default: ""
+  healthcheck_path:
+    description: "The path to use for the health check"
+    default: "/"
   image:
     description: "The image to deploy"
     required: true
   image_internal:
     description: "The image stored in GAR"
+  job:
+    description: "The job to deploy"
   region:
     description: "The region to deploy the Cloud Run service to"
     required: true
+  service:
+    description: "The service to deploy"
   service_account:
     description: "The service account to use for authentication"
-    required: true
-  workload_identity_provider:
-    description: "The workload identity provider to use for authentication"
     required: true
   to_latest:
     description: "Whether to deploy to the latest revision"
     default: "true"
+  workload_identity_provider:
+    description: "The workload identity provider to use for authentication"
+    required: true
 runs:
   using: composite
   steps:
@@ -32,6 +44,15 @@ runs:
         workload_identity_provider: ${{ inputs.workload_identity_provider }}
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@v2
+    - name: Setup status codes for catching errors
+      id: http_responses
+      shell: bash
+      run: |
+        echo "Need to set this otherwise the action will fail and status will be empty even continue-on-error is set to true"
+        echo "codes='300,301,302,303,304,305,306,307,308,400,401,402,403,404,405,406,408,409,410,411,412,413,414,415,416,417,418,421,422,425,426,428,429,431,451,500,501,502,503,504,505,506,507,510,511'" >> "${GITHUB_OUTPUT}"
+    - name: Logging - setup cloud SDK
+      run: echo "Setting up Cloud SDK..."
+      shell: bash
     - name: Configure docker
       shell: bash
       run: gcloud auth configure-docker ${{ inputs.region }}-docker.pkg.dev --quiet
@@ -45,11 +66,143 @@ runs:
       env:
         IMAGE: ${{ inputs.image }}
         IMAGE_INTERNAL: ${{ inputs.image_internal }}
+    - name: Set Host header
+      id: set_header
+      if: ${{ inputs.hostname != '' }}
+      run: |
+        if [[ -n "${{ inputs.hostname }}" ]]; then
+          echo "customHeaders={\"Host\": \"${{ inputs.hostname }}\"}" >> "${GITHUB_OUTPUT}"
+        else
+          echo "customHeaders={}" >> "${GITHUB_OUTPUT}"
+        fi
+      shell: bash
+    - name: Get current Cloud Run service revision
+      id: get_revision
+      if: ${{ inputs.automatic_rollback_enabled == 'true' || inputs.blue_green_enabled == 'true' }}
+      shell: bash
+      run: |
+        echo "Getting current cloudrun revision..."
+        REV=$( \
+          gcloud run services describe "${{ inputs.service }}" \
+            --region "${{ inputs.region }}" \
+            --format="value(status.latestReadyRevisionName)" \
+        )
+        echo "Current revision: $REV"
+        echo "revision=$REV" >> "$GITHUB_OUTPUT"
+    - name: Logging - Deploy to Cloud Run
+      run: echo "Deploying to Cloud Run..."
+      if: ${{ inputs.blue_green_enabled == 'false' }}
+      shell: bash
     - name: Deploy to Cloud Run
       uses: google-github-actions/deploy-cloudrun@v2
+      if: ${{ inputs.blue_green_enabled == 'false' }}
+      id: deploy
       with:
         service: ${{ inputs.service }}
         job: ${{ inputs.job }}
-        image: ${{ inputs.image_gcp || inputs.image }}
+        image: ${{ inputs.image_internal || inputs.image }}
         region: ${{ inputs.region }}
-        revision_traffic: ${{ inputs.to_latest == "true" && "LATEST=100" || "" }}
+        revision_traffic: ${{ inputs.to_latest == 'true' && 'LATEST=100' || '' }}
+        skip_default_labels: true
+    - name: Run HTTP health check
+      continue-on-error: true
+      uses: fjogeleit/http-request-action@v1
+      if: ${{ inputs.blue_green_enabled == 'false' }}
+      id: test_live
+      with:
+        url: ${{ steps.deploy.outputs.url }}${{ inputs.healthcheck_path }}
+        method: 'GET'
+        ignoreSsl: true
+        ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
+        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
+    - name: Logging - Deploy to Cloud Run Blue
+      run: echo "Deploying ${{ inputs.image_internal || inputs.image }} to ${{ inputs.service }} blue..."
+      if: ${{ inputs.blue_green_enabled == 'true' }}
+      shell: bash
+    - name: Deploy to Cloud Run Blue
+      uses: google-github-actions/deploy-cloudrun@v2
+      id: deploy_blue
+      if: ${{ inputs.blue_green_enabled == 'true' }}
+      with:
+        service: ${{ inputs.service }}
+        job: ${{ inputs.job }}
+        image: ${{ inputs.image_internal || inputs.image }}
+        region: ${{ inputs.region }}
+        tag: blue-release
+        no_traffic: true
+        skip_default_labels: true
+    - name: Sleep 10 seconds before doing test on blue
+      run: |
+        echo "Sleeping 10 seconds before doing test on blue"
+        sleep 10
+      if: ${{ inputs.blue_green_enabled == 'true' }}
+      shell: bash
+    - name: Run HTTP health check on blue
+      uses: fjogeleit/http-request-action@v1
+      if: ${{ inputs.blue_green_enabled == 'true' && inputs.healthcheck_path }}
+      id: test_blue
+      with:
+        url: ${{ steps.deploy_blue.outputs.url }}${{ inputs.healthcheck_path }}
+        method: 'GET'
+        ignoreSsl: true
+        ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
+        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
+    - name: Logging - Check HTTP Status from test_blue
+      run: |
+        echo "HTTP Status from test_blue: ${{ steps.test_blue.outputs.status }}"
+      if: ${{ inputs.blue_green_enabled == 'true' && inputs.healthcheck_path }}
+      shell: bash
+    - name: Logging - Deploy to Cloud Run Green
+      run: echo "Deploying ${{ inputs.image_internal || inputs.image }} to ${{ inputs.service }} green..."
+      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
+      shell: bash
+    - name: Deploy to Cloud Run Green
+      uses: google-github-actions/deploy-cloudrun@v2
+      id: deploy_green
+      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
+      with:
+        service: ${{ inputs.service }}
+        job: ${{ inputs.job }}
+        image: ${{ inputs.image_internal || inputs.image }}
+        region: ${{ inputs.region }}
+        revision_traffic: 'LATEST=100'
+        skip_default_labels: 'true'
+        update_traffic_flags: '--remove-tags blue-release'
+    - name: Sleep 10 seconds before doing test on green
+      run: |
+        echo "Sleeping 10 seconds before doing test on green"
+        sleep 10
+      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
+      shell: bash
+    - name: Run HTTP health check on green
+      continue-on-error: true
+      uses: fjogeleit/http-request-action@v1
+      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
+      id: test_green
+      with:
+        url: ${{ steps.deploy_green.outputs.url }}${{ inputs.healthcheck_path }}
+        method: 'GET'
+        ignoreSsl: true
+        ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
+        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
+    - name: Logging - Check HTTP Status from test_green
+      run: |
+        echo "HTTP Status from test_green: ${{ steps.test_green.outputs.status }}"
+      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_green.outputs.status > 0 }}
+      shell: bash
+    - name: Logging - Rollback to previous version
+      if: ${{ inputs.automatic_rollback_enabled == 'true' && (steps.test_green.outputs.status >= 300 || steps.test_live.outputs.status >= 300) }}
+      run: |
+        echo "Rolling back to: ${{ steps.get_revision.outputs.revision }}"
+      shell: bash
+    - name: Rollback to previous version if health check fails
+      uses: google-github-actions/deploy-cloudrun@v2
+      id: rollback
+      if: ${{ inputs.automatic_rollback_enabled == 'true' && (steps.test_green.outputs.status >= 300 || steps.test_live.outputs.status >= 300) }}
+      with:
+        service: ${{ inputs.service }}
+        job: ${{ inputs.job }}
+        image: ${{ inputs.image_internal || inputs.image }}
+        region: ${{ inputs.region }}
+        revision_traffic: '${{ steps.get_revision.outputs.revision }}=100'
+        skip_default_labels: true
