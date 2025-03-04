@@ -131,12 +131,6 @@ runs:
         tag: blue-release
         no_traffic: true
         skip_default_labels: true
-    - name: Sleep 10 seconds before doing test on blue
-      run: |
-        echo "Sleeping 10 seconds before doing test on blue"
-        sleep 10
-      if: ${{ inputs.blue_green_enabled == 'true' }}
-      shell: bash
     - name: Run HTTP health check on blue
       uses: fjogeleit/http-request-action@v1
       if: ${{ inputs.blue_green_enabled == 'true' && inputs.healthcheck_path }}
@@ -168,12 +162,6 @@ runs:
         revision_traffic: 'LATEST=100'
         skip_default_labels: 'true'
         update_traffic_flags: '--remove-tags blue-release'
-    - name: Sleep 10 seconds before doing test on green
-      run: |
-        echo "Sleeping 10 seconds before doing test on green"
-        sleep 10
-      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
-      shell: bash
     - name: Run HTTP health check on green
       continue-on-error: true
       uses: fjogeleit/http-request-action@v1
@@ -206,3 +194,13 @@ runs:
         region: ${{ inputs.region }}
         revision_traffic: '${{ steps.get_revision.outputs.revision }}=100'
         skip_default_labels: true
+    - name: Cleanup blue-release tag
+      uses: google-github-actions/deploy-cloudrun@v2
+      id: deploy_green
+      if: always()
+      with:
+        service: ${{ inputs.service }}
+        job: ${{ inputs.job }}
+        region: ${{ inputs.region }}
+        skip_default_labels: 'true'
+        update_traffic_flags: '--remove-tags blue-release'
