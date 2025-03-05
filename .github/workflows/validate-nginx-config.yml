@@ -19,7 +19,7 @@ on:
       workdir:
         default: 'web'
         description: Default working directory to run the job
-        required: true
+        required: false
         type: string  
 
 jobs:
