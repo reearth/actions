@@ -7,12 +7,6 @@ inputs:
   blue_green_enabled:
     description: "Whether to enable blue-green deployment"
     default: "false"
-  hostname:
-    description: "The hostname to use for the service. Only be used in Host header when sending health check request to the service. Don't include the protocol (http/https)"
-    default: ""
-  healthcheck_path:
-    description: "The path to use for the health check"
-    default: "/"
   image:
     description: "The image to deploy"
     required: true
@@ -28,6 +22,9 @@ inputs:
   service_account:
     description: "The service account to use for authentication"
     required: true
+  test_url:
+    description: "The full URL to use for testing the service externally. Include the protocol and full path. e.g. https://example.com/health or http://example.com"
+    default: ""
   to_latest:
     description: "Whether to deploy to the latest revision"
     default: "true"
@@ -66,15 +63,21 @@ runs:
       env:
         IMAGE: ${{ inputs.image }}
         IMAGE_INTERNAL: ${{ inputs.image_internal }}
-    - name: Set Host header
-      id: set_header
-      if: ${{ inputs.hostname != '' }}
+    - name: Parse test_url and retrieve the path
+      id: parse_url
+      if: ${{ inputs.test_url != '' }}
       run: |
-        if [[ -n "${{ inputs.hostname }}" ]]; then
-          echo "customHeaders={\"Host\": \"${{ inputs.hostname }}\"}" >> "${GITHUB_OUTPUT}"
-        else
-          echo "customHeaders={}" >> "${GITHUB_OUTPUT}"
-        fi
+        extract_path() {
+            local url="$1"
+            # Remove scheme (http:// or https://) and domain, keep only the path
+            local path=$(echo "$url" | sed -E 's|https?://[^/]+||')
+            # If path is empty, set to "/"
+            if [[ -z "$path" ]]; then
+                path="/"
+            fi
+            echo "url_path=$path" >> "${GITHUB_OUTPUT}"
+        }
+        extract_path "${{ inputs.test_url }}"
       shell: bash
     - name: Get current Cloud Run service revision
       id: get_revision
@@ -107,14 +110,13 @@ runs:
     - name: Run HTTP health check
       continue-on-error: true
       uses: fjogeleit/http-request-action@v1
-      if: ${{ inputs.blue_green_enabled == 'false' }}
+      if: ${{ inputs.blue_green_enabled == 'false' && inputs.test_url != '' }}
       id: test_live
       with:
-        url: ${{ steps.deploy.outputs.url }}${{ inputs.healthcheck_path }}
+        url: ${{ inputs.test_url }}
         method: 'GET'
         ignoreSsl: true
         ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
-        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
     - name: Logging - Deploy to Cloud Run Blue
       run: echo "Deploying ${{ inputs.image_internal || inputs.image }} to ${{ inputs.service }} blue..."
       if: ${{ inputs.blue_green_enabled == 'true' }}
@@ -133,18 +135,17 @@ runs:
         skip_default_labels: true
     - name: Run HTTP health check on blue
       uses: fjogeleit/http-request-action@v1
-      if: ${{ inputs.blue_green_enabled == 'true' && inputs.healthcheck_path }}
+      if: ${{ inputs.blue_green_enabled == 'true' && inputs.test_url != ''}}
       id: test_blue
       with:
-        url: ${{ steps.deploy_blue.outputs.url }}${{ inputs.healthcheck_path }}
+        url: ${{ steps.deploy_blue.outputs.url }}${{ steps.parse_url.outputs.url_path }}
         method: 'GET'
         ignoreSsl: true
         ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
-        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
     - name: Logging - Check HTTP Status from test_blue
       run: |
         echo "HTTP Status from test_blue: ${{ steps.test_blue.outputs.status }}"
-      if: ${{ inputs.blue_green_enabled == 'true' && inputs.healthcheck_path }}
+      if: ${{ inputs.blue_green_enabled == 'true' }}
       shell: bash
     - name: Logging - Deploy to Cloud Run Green
       run: echo "Deploying ${{ inputs.image_internal || inputs.image }} to ${{ inputs.service }} green..."
@@ -165,14 +166,13 @@ runs:
     - name: Run HTTP health check on green
       continue-on-error: true
       uses: fjogeleit/http-request-action@v1
-      if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
+      if: ${{ inputs.blue_green_enabled == 'true' && inputs.test_url != '' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
       id: test_green
       with:
-        url: ${{ steps.deploy_green.outputs.url }}${{ inputs.healthcheck_path }}
+        url: ${{ inputs.test_url }}
         method: 'GET'
         ignoreSsl: true
         ignoreStatusCodes: ${{ steps.http_responses.outputs.codes }}
-        customHeaders: ${{ steps.set_header.outputs.customHeaders }}
     - name: Logging - Check HTTP Status from test_green
       run: |
         echo "HTTP Status from test_green: ${{ steps.test_green.outputs.status }}"
@@ -186,7 +186,7 @@ runs:
     - name: Rollback to previous version if health check fails
       uses: google-github-actions/deploy-cloudrun@v2
       id: rollback
-      if: ${{ inputs.automatic_rollback_enabled == 'true' && (steps.test_green.outputs.status >= 300 || steps.test_live.outputs.status >= 300) }}
+      if: ${{ inputs.automatic_rollback_enabled == 'true' && inputs.test_url != '' && (steps.test_green.outputs.status >= 300 || steps.test_live.outputs.status >= 300) }}
       with:
         service: ${{ inputs.service }}
         job: ${{ inputs.job }}
@@ -194,13 +194,3 @@ runs:
         region: ${{ inputs.region }}
         revision_traffic: '${{ steps.get_revision.outputs.revision }}=100'
         skip_default_labels: true
-    - name: Cleanup blue-release tag
-      uses: google-github-actions/deploy-cloudrun@v2
-      id: deploy_green
-      if: always()
-      with:
-        service: ${{ inputs.service }}
-        job: ${{ inputs.job }}
-        region: ${{ inputs.region }}
-        skip_default_labels: 'true'
-        update_traffic_flags: '--remove-tags blue-release'
