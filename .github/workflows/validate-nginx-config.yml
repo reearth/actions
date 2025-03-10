@@ -2,11 +2,11 @@ name: Validate Nginx Configuration
 on:
   workflow_call:
     inputs:
-      templatedir: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
+      template_directory: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
         description: Nginx configuration template directory. Usually have files with .template extension
         required: true
         type: string
-      templatevalues:
+      template_values:
         default: '{}'
         description: Custom template values in JSON format to be passed to the environment variables. The key and value can be used in the Nginx configuration template files
         required: false
@@ -16,10 +16,10 @@ on:
         description: Toggle verbose output. By setting this to true, the job will print out the nginx version, nginx config files, and generated config files
         required: false
         type: boolean
-      workdir:
+      working_directory:
         default: 'web'
         description: Default working directory to run the job
-        required: true
+        required: false
         type: string  
 
 jobs:
@@ -27,10 +27,10 @@ jobs:
     name: validate-nginx-config
     runs-on: ubuntu-latest
     env:
-      NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.templatedir}}
+      NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.template_directory}}
     defaults:
       run:
-        working-directory: ${{ inputs.workdir }}
+        working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v4
       - name: check Nginx version
@@ -38,12 +38,12 @@ jobs:
         if: ${{ inputs.verbose }}
       - name: Parse custom template values and export as environment variables
         run: |
-          # Check if templatevalues is set
-          if [ -n "${{ inputs.templatevalues }}" ] && [ "${{ inputs.templatevalues }}" != "{}" ]; then
-            echo "Parsing custom headers: ${{ inputs.templatevalues }}"
+          # Check if template_values is set
+          if [ -n "${{ inputs.template_values }}" ] && [ "${{ inputs.template_values }}" != "{}" ]; then
+            echo "Parsing custom headers: ${{ inputs.template_values }}"
             
             # Parse and export each key-value pair as an environment variable
-            echo '${{ inputs.templatevalues }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
+            echo '${{ inputs.template_values }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
                 # Replace hyphens with underscores to make it a valid environment variable name
                 env_var_name=$(echo "$key" | tr '-' '_')
                 echo "Exporting: $env_var_name=$value"
