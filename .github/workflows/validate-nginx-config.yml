@@ -50,7 +50,7 @@ jobs:
                 echo "$env_var_name=$value" >> $GITHUB_ENV
             done
           else
-            echo "No custom headers provided."
+            echo "No custom template values provided."
           fi
       - name: list Nginx config template directory
         run: ls -l ${{ env.NGINX_ENVSUBST_TEMPLATE_DIR }} /etc/nginx/ /etc/nginx/conf.d/
