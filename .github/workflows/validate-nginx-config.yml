@@ -1,0 +1,74 @@
+name: Validate Nginx Configuration
+on:
+  workflow_call:
+    inputs:
+      template_directory: # Ref: https://github.com/nginxinc/docker-nginx-unprivileged/blob/main/entrypoint/20-envsubst-on-templates.sh#L32
+        description: Nginx configuration template directory. Usually have files with .template extension
+        required: true
+        type: string
+      template_values:
+        default: '{}'
+        description: Custom template values in JSON format to be passed to the environment variables. The key and value can be used in the Nginx configuration template files
+        required: false
+        type: string
+      verbose:
+        default: true
+        description: Toggle verbose output. By setting this to true, the job will print out the nginx version, nginx config files, and generated config files
+        required: false
+        type: boolean
+      working_directory:
+        default: 'web'
+        description: Default working directory to run the job
+        required: false
+        type: string
+
+jobs:
+  validate-nginx-config:
+    name: validate-nginx-config
+    runs-on: ubuntu-latest
+    env:
+      NGINX_ENVSUBST_TEMPLATE_DIR: ${{ inputs.template_directory}}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: check Nginx version
+        run: sudo nginx -v
+        if: ${{ inputs.verbose }}
+      - name: Parse custom template values and export as environment variables
+        run: |
+          # Check if template_values is set
+          if [ -n "${{ inputs.template_values }}" ] && [ "${{ inputs.template_values }}" != "{}" ]; then
+            echo "Parsing custom template values: ${{ inputs.template_values }}"
+
+            # Parse and export each key-value pair as an environment variable
+            echo '${{ inputs.template_values }}' | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' | while IFS="=" read -r key value; do
+                # Replace hyphens with underscores to make it a valid environment variable name
+                env_var_name=$(echo "$key" | tr '-' '_')
+                echo "Exporting: $env_var_name=$value"
+                echo "$env_var_name=$value" >> $GITHUB_ENV
+            done
+          else
+            echo "No custom template values provided."
+          fi
+      - name: list Nginx config template directory
+        run: ls -l ${{ env.NGINX_ENVSUBST_TEMPLATE_DIR }} /etc/nginx/ /etc/nginx/conf.d/
+        if: ${{ inputs.verbose }}
+      - name: download Nginx envsubst script
+        run: |
+          curl -s -O https://raw.githubusercontent.com/nginxinc/docker-nginx/2879b26c7dedf1d958b1894a5c1b1dec3c026369/entrypoint/20-envsubst-on-templates.sh
+          chmod +x 20-envsubst-on-templates.sh
+      - name: envsubst Nginx config
+        run: sudo --preserve-env ./20-envsubst-on-templates.sh
+      - name: check generated config files
+        run: ls -l /etc/nginx/conf.d/
+        if: ${{ inputs.verbose }}
+      - name: Printout nginx config files
+        run: cat /etc/nginx/nginx.conf
+        if: ${{ inputs.verbose }}
+      - name: Printout generated config files
+        run: cat /etc/nginx/conf.d/*
+        if: ${{ inputs.verbose }}
+      - name: test Nginx configuration
+        run: sudo nginx -t
