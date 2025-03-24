@@ -26,7 +26,9 @@ runs:
             }); \
           " \
         )
-        echo "token=$(echo -n "${ION_TOKEN}" | sed -e 's/[[:space:]]*$//')" >> $GITHUB_OUTPUT
+        # Strip all trailing and leading whitespace, including newlines
+        TOKEN=$(echo -n "$ION_TOKEN" | tr -d '[:space:]')
+        echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
     - name: Update Secret Manager secret
       shell: bash
