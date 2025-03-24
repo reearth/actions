@@ -26,7 +26,7 @@ runs:
             }); \
           " \
         )
-        echo "token=${ION_TOKEN}" >> $GITHUB_OUTPUT
+        echo "token=$(echo -n "${ION_TOKEN}" | sed -e 's/[[:space:]]*$//')" >> $GITHUB_OUTPUT
 
     - name: Update Secret Manager secret
       shell: bash
