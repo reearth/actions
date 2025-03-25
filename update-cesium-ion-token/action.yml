@@ -26,8 +26,16 @@ runs:
             }); \
           " \
         )
-        echo "token=${ION_TOKEN}" >> $GITHUB_OUTPUT
+
+        # Trim leading/trailing whitespace and remove newlines
+        CLEAN_TOKEN=$(echo "$ION_TOKEN" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+        echo "token=$CLEAN_TOKEN" >> $GITHUB_OUTPUT
 
     - name: Update Secret Manager secret
       shell: bash
-      run: gcloud secrets versions add ${{ inputs.secret }} --data-file=<(echo "${{ steps.fetch.outputs.token }}")
+      run: |
+        TOKEN="${{ steps.fetch.outputs.token }}"
+        # Remove any leftover whitespace or newlines again, just in case
+        CLEANED=$(echo "$TOKEN" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        echo -n "$CLEANED" | gcloud secrets versions add ${{ inputs.secret }} --data-file=-
