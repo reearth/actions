@@ -1,0 +1,47 @@
+name: Pack a Build Artifact into a Docker image
+description: Pack a build artifact into a Docker image.
+inputs:
+  image:
+    description: Name of the image to upload
+    required: true
+  src:
+    description: Directory path to what to upload
+    required: true
+  push:
+    description: Whether to push the image
+    default: 'true'
+  cleanup:
+    description: Whether to remove the image after pushing
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Check if src is directory
+      id: check
+      shell: bash
+      run: |
+        if [ ! -d "$SRC" ]; then
+          echo "$SRC is not a directory"
+          exit 1
+        fi
+      env:
+        SRC: ${{ inputs.src }}
+    - name: Create a image
+      shell: bash
+      run: |
+        tar -cf - "$SRC" | docker import - "$IMAGE"
+      env:
+        IMAGE: ${{ inputs.image }}
+        SRC: ${{ inputs.src }}
+    - name: Push the image
+      shell: bash
+      run: docker push "$IMAGE"
+      if: ${{ inputs.push == 'true' }}
+      env:
+        IMAGE: ${{ inputs.image }}
+    - name: Cleanup
+      shell: bash
+      run: docker rmi "$IMAGE"
+      if: ${{ inputs.cleanup == 'true' }}
+      env:
+        IMAGE: ${{ inputs.image }}

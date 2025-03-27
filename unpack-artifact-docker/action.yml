@@ -1,0 +1,60 @@
+name: Extract a Build Artifact from a Docker image
+description: Extract a build artifact from a Docker image.
+inputs:
+  image:
+    description: Name of the image to extract
+    required: true
+  src:
+    description: Path in the image to extract
+    required: true
+  dest:
+    description: Directory to extract to
+    required: false
+    default: .
+  unwrap:
+    description: Whether to unwrap the directory structure
+    required: false
+    default: 'false'
+  pull:
+    description: Whether to push the image
+    required: false
+    default: 'true'
+  cleanup:
+    description: Whether to remove the image after extracting
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Pull the image
+      shell: bash
+      if: ${{ inputs.pull == 'true' }}
+      run: docker pull "$IMAGE"
+      env:
+        IMAGE: ${{ inputs.image }}
+    - name: Extract the artifact
+      shell: bash
+      run: |
+        CID=$(docker create "$IMAGE" /)
+        docker cp "$CID":"$SRC" "$DEST"
+        docker rm "$CID"
+      env:
+        IMAGE: ${{ inputs.image }}
+        SRC: ${{ inputs.src }}
+        DEST: ${{ inputs.dest }}
+    - name: Cleanup
+      shell: bash
+      if: ${{ inputs.cleanup == 'true' }}
+      run: docker rmi "$IMAGE"
+      env:
+        IMAGE: ${{ inputs.image }}
+    - name: Unwrap the directory
+      shell: bash
+      if: ${{ inputs.unwrap == 'true' && inputs.dest != '.' }}
+      run: |
+        shopt -s dotglob
+        PARENT=$(dirname "$DEST")
+        mv "$DEST"/* "$PARENT"
+        rmdir "$DEST"
+      env:
+        DEST: ${{ inputs.dest }}
