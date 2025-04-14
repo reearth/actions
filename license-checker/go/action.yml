@@ -1,0 +1,31 @@
+name: Check Go License Compliance
+description: Check Go dependencies for license compliance using go-licenses
+
+inputs:
+  subdirectory:
+    description: The subdirectory to check dependencies
+    default: .
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ inputs.subdirectory }}/go.mod
+        check-latest: true
+        cache-dependency-path: |
+          ${{ inputs.subdirectory }}/go.sum
+    - name: Install go-licenses
+      shell: bash
+      run: go install github.com/google/go-licenses@v1.6.0
+    - name: Check for License Compliance
+      shell: bash
+      working-directory: ${{ inputs.subdirectory }}
+      # github.com/yudai/pp has MIT License
+      run: |
+        go-licenses check ./... --stderrthreshold=10 \
+          --disallowed_types=forbidden,restricted,unknown \
+          --ignore github.com/eukarya-inc,github.com/reearth \
+          --ignore github.com/yudai/pp
