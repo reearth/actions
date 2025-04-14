@@ -10,6 +10,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ inputs.subdirectory }}/go.mod
+        check-latest: true
+        cache-dependency-path: |
+          ${{ inputs.subdirectory }}/go.sum
     - name: Install go-licenses
       shell: bash
       run: go install github.com/google/go-licenses@v1.6.0
