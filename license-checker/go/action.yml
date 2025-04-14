@@ -1,0 +1,16 @@
+name: Check Go License Compliance
+description: Check Go dependencies for license compliance using go-licenses
+
+runs:
+  using: composite
+  steps:
+    - name: Install go-licenses
+      shell: bash
+      run: go install github.com/google/go-licenses@latest
+    - name: Check for License Compliance
+      shell: bash
+      run: |
+        go-licenses check ./... --stderrthreshold=10 \
+          --disallowed_types=forbidden,restricted,unknown \
+          --ignore github.com/eukarya-inc,github.com/reearth \
+          --logtostderr=false
