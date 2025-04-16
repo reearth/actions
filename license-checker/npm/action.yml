@@ -23,6 +23,7 @@ runs:
       with:
         node-version-file: ${{ inputs.subdirectory }}/package.json
         cache: yarn
+        cache-dependency-path: ${{ inputs.subdirectory }}/yarn.lock
     - name: Install license-checker
       shell: bash
       run: npm install -g license-checker-rseidelsohn
