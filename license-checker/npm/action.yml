@@ -26,6 +26,7 @@ runs:
       shell: bash
       run: |
         corepack enable
+        yarn install
     - name: Install license-checker
       shell: bash
       run: npm install -g license-checker-rseidelsohn
