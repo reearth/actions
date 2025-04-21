@@ -1,0 +1,30 @@
+name: Check NPM License Compliance
+description: Check NPM dependencies for license compliance using license-checker
+
+inputs:
+  subdirectory:
+    description: The subdirectory to check dependencies
+    default: .
+    required: false
+  allowed_licenses:
+    description: Allowed license types (semicolon separated)
+    default: MIT;Apache;ISC;BSD;Python;CC;Public Domain;BlueOak;Unlicense
+    required: false
+  clarifications_file:
+    description: File to clarify package license
+    default: ../.github/clarification_file_license.json
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Install license-checker
+      shell: bash
+      run: npm install -g license-checker-rseidelsohn
+    - name: Check for License Compliance
+      shell: bash
+      working-directory: ${{ inputs.subdirectory }}
+      run: |
+        license-checker-rseidelsohn --excludePrivatePackages --production \
+          --clarificationsFile ${{ inputs.clarifications_file }} \
+          --onlyAllow "${{ inputs.allowed_licenses }}"
