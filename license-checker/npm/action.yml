@@ -8,7 +8,7 @@ inputs:
     required: false
   allowed_licenses:
     description: Allowed license types (semicolon separated)
-    default: MIT;Apache;ISC;BSD;Python;CC;Public Domain;BlueOak;Unlicense
+    default: ''
     required: false
   clarifications_file:
     description: File to clarify package license
@@ -27,4 +27,4 @@ runs:
       run: |
         license-checker-rseidelsohn --excludePrivatePackages --production \
           --clarificationsFile ${{ inputs.clarifications_file }} \
-          --onlyAllow "${{ inputs.allowed_licenses }}"
+          --onlyAllow "MIT;Apache;ISC;BSD;Python;CC;Public Domain;BlueOak;Unlicense;MPL;${{ inputs.allowed_licenses }}"
