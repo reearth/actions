@@ -27,4 +27,4 @@ runs:
       run: |
         license-checker-rseidelsohn --excludePrivatePackages --production \
           --clarificationsFile ${{ inputs.clarifications_file }} \
-          --onlyAllow "MIT;Apache;ISC;BSD;Python;CC;Public Domain;BlueOak;Unlicense;${{ inputs.allowed_licenses }}"
+          --onlyAllow "MIT;Apache;ISC;BSD;Python;CC;Public Domain;BlueOak;Unlicense;MPL;${{ inputs.allowed_licenses }}"
