@@ -22,6 +22,10 @@ inputs:
   workload_identity_provider:
     description: "The workload identity provider to use for authentication"
     required: true
+outputs:
+  url:
+    description: "The URL of the deployed Cloud Run service"
+    value: ${{ steps.deploy-pr.outputs.url }}
 runs:
   using: composite
   steps:
