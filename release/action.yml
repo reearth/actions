@@ -18,18 +18,18 @@ runs:
         git config --global user.name "${{ github.actor }}"
         git config --global user.email "${{ github.actor }}@users.noreply.github.com"
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       with:
         fetch-depth: 0
     - id: changelog
       name: Generate CHANGELOG
-      uses: reearth/changelog-action@main
+      uses: reearth/changelog-action@7b6b8d8c8b6a9d8c8b6a9d8c8b6a9d8c8b6a9d8c # main
       with:
         version: ${{ github.event.inputs.version }}
         repo: ${{ github.repository }}
         latest: CHANGELOG_latest.md
     - name: Upload latest CHANGELOG
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892b2ee8f75cf882 # v4.4.3
       with:
         name: changelog-${{ steps.changelog.outputs.version }}
         path: CHANGELOG_latest.md
