@@ -55,7 +55,7 @@ runs:
         RELEASE_BRANCH: ${{ inputs.release_branch }}
         MAIN_BRANCH: ${{ inputs.main_branch }}
       run: |
-        echo "sha_short=$(git rev-parse --short HEAD))" >> "$GITHUB_OUTPUT"
+        echo "sha_short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
         if [[ "$BRANCH" = "$RELEASE_BRANCH" ]]; then
           if [[ "$GITHUB_REPOSITORY" = "$INPUT_REPO" ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
