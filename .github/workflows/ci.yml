@@ -10,7 +10,7 @@ jobs:
       contents: read # To checkout
       pull-requests: write # To comment to PRs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: reviewdog/action-alex@v1
         with:
@@ -23,7 +23,7 @@ jobs:
       contents: read # To checkout
       pull-requests: write # To comment to PRs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: reviewdog/action-misspell@v1
         with:
