@@ -109,7 +109,7 @@ runs:
         skip_default_labels: true
     - name: Run HTTP health check
       continue-on-error: true
-      uses: fjogeleit/http-request-action@ed8a1c36dbb357b7c5dd869722ae4d0018ff07e8 # v1.15.5
+      uses: fjogeleit/http-request-action@23ad54bcd1178fcff6a0d17538fa09de3a7f0a4d # v1.16.4
       if: ${{ inputs.blue_green_enabled == 'false' && inputs.test_url != '' }}
       id: test_live
       with:
@@ -134,7 +134,7 @@ runs:
         no_traffic: true
         skip_default_labels: true
     - name: Run HTTP health check on blue
-      uses: fjogeleit/http-request-action@ed8a1c36dbb357b7c5dd869722ae4d0018ff07e8 # v1.15.5
+      uses: fjogeleit/http-request-action@23ad54bcd1178fcff6a0d17538fa09de3a7f0a4d # v1.16.4
       if: ${{ inputs.blue_green_enabled == 'true' && inputs.test_url != ''}}
       id: test_blue
       with:
@@ -165,7 +165,7 @@ runs:
         update_traffic_flags: '--remove-tags blue-release'
     - name: Run HTTP health check on green
       continue-on-error: true
-      uses: fjogeleit/http-request-action@ed8a1c36dbb357b7c5dd869722ae4d0018ff07e8 # v1.15.5
+      uses: fjogeleit/http-request-action@23ad54bcd1178fcff6a0d17538fa09de3a7f0a4d # v1.16.4
       if: ${{ inputs.blue_green_enabled == 'true' && inputs.test_url != '' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
       id: test_green
       with:
