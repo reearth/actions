@@ -1,5 +1,5 @@
 name: Build and Sync Cerbos Policies
-description: Generate Cerbos policy files and sync to GCS bucket
+description: Generate Cerbos policy files and sync to Google Cloud Storage (GCS). Only GCS is supported.
 inputs:
   repository:
     description: Repository to build policies from (defaults to current repository)
