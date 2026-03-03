@@ -1,0 +1,151 @@
+name: Build and Sync Cerbos Policies
+description: Generate Cerbos policy files and sync to Google Cloud Storage (GCS). Only GCS is supported.
+inputs:
+  repository:
+    description: Repository to build policies from (defaults to current repository)
+    required: false
+    default: ""
+  token:
+    description: GitHub token for checkout (defaults to github.token)
+    required: false
+    default: ""
+  work_dir:
+    description: Working directory containing go.mod and Makefile
+    required: true
+  policy_prefix:
+    description: Policy file prefix (e.g., accounts, flow, dashboard)
+    required: true
+  gcs_bucket_path:
+    description: GCS bucket path (e.g., gs://cerbos-policy-reearth)
+    required: true
+  dry_run:
+    description: Dry run mode (true = preview only, false = apply changes)
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        repository: ${{ inputs.repository || github.repository }}
+        token: ${{ inputs.token || github.token }}
+        path: .target-repo
+
+    - name: Set up Go
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      with:
+        go-version-file: .target-repo/${{ inputs.work_dir }}/go.mod
+        cache-dependency-path: |
+          .target-repo/${{ inputs.work_dir }}/go.sum
+
+    - name: Generate policies
+      shell: bash
+      run: |
+        set -e
+        if ! make gen-policies; then
+          echo "Policy generation failed"
+          exit 1
+        fi
+      working-directory: .target-repo/${{ inputs.work_dir }}
+
+    - name: Sync policies with Cloud Storage
+      shell: bash
+      env:
+        POLICY_PREFIX: ${{ inputs.policy_prefix }}
+        GCS_BUCKET_PATH: ${{ inputs.gcs_bucket_path }}
+        POLICIES_DIR: .target-repo/${{ inputs.work_dir }}/policies
+        DRY_RUN: ${{ inputs.dry_run }}
+      run: |
+        set -euo pipefail
+
+        # Download current bucket files (before state)
+        echo "=== Downloading current bucket files ==="
+        mkdir -p /tmp/before
+        if gsutil ls "${GCS_BUCKET_PATH}/${POLICY_PREFIX}_*.yaml" 2>/dev/null; then
+          gsutil -m cp "${GCS_BUCKET_PATH}/${POLICY_PREFIX}_*.yaml" /tmp/before/ || true
+        fi
+        echo "Downloaded $(ls /tmp/before/${POLICY_PREFIX}_*.yaml 2>/dev/null | wc -l) files from bucket"
+        echo "----------------------------------------"
+
+        # Prepare simulated after state for diff
+        mkdir -p /tmp/after
+        cp /tmp/before/*.yaml /tmp/after/ 2>/dev/null || true
+
+        # Process uploads (add/update local files)
+        echo "=== Processing uploads ==="
+        if ls ${POLICIES_DIR}/${POLICY_PREFIX}_*.yaml 1>/dev/null 2>&1; then
+          for local_file in ${POLICIES_DIR}/${POLICY_PREFIX}_*.yaml; do
+            file_name=$(basename "$local_file")
+            needs_upload=false
+            if [ -f "/tmp/before/$file_name" ]; then
+              if ! diff -q "$local_file" "/tmp/before/$file_name" >/dev/null 2>&1; then
+                echo "Will update: $file_name"
+                needs_upload=true
+              fi
+            else
+              echo "Will add: $file_name"
+              needs_upload=true
+            fi
+            cp "$local_file" /tmp/after/
+            if [ "$DRY_RUN" = "false" ] && [ "$needs_upload" = "true" ]; then
+              if ! gsutil cp "$local_file" "${GCS_BUCKET_PATH}/$file_name"; then
+                echo "Error: Failed to upload $file_name"
+                exit 1
+              fi
+              echo "Uploaded: $file_name"
+            fi
+          done
+        fi
+        echo "----------------------------------------"
+
+        # Process deletions (files in bucket but not in local)
+        echo "=== Processing deletions ==="
+        if ls /tmp/before/${POLICY_PREFIX}_*.yaml 1>/dev/null 2>&1; then
+          for bucket_file in /tmp/before/${POLICY_PREFIX}_*.yaml; do
+            file_name=$(basename "$bucket_file")
+            if [ ! -f "${POLICIES_DIR}/$file_name" ]; then
+              echo "Will delete: $file_name"
+              rm -f "/tmp/after/$file_name"
+              if [ "$DRY_RUN" = "false" ]; then
+                if ! gsutil rm "${GCS_BUCKET_PATH}/$file_name"; then
+                  echo "Error: Failed to delete $file_name"
+                  exit 1
+                fi
+                echo "Deleted: $file_name"
+              fi
+            fi
+          done
+        fi
+        echo "----------------------------------------"
+
+        # Show diff between before and after
+        echo "=== Diff: before vs after ==="
+        diff -ru /tmp/before/ /tmp/after/ && diff_exit_code=0 || diff_exit_code=$?
+        if [ "$diff_exit_code" -eq 0 ]; then
+          echo "No differences found. Bucket is already up to date."
+        elif [ "$diff_exit_code" -eq 1 ]; then
+          echo ""
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "=========================================="
+            echo "Changes detected. Review the diff above."
+            echo "To apply changes, run again with dry_run=false"
+            echo "=========================================="
+          else
+            echo "=========================================="
+            echo "Changes applied successfully."
+            echo "=========================================="
+          fi
+        else
+          echo "Error: diff failed with exit code $diff_exit_code"
+          exit "$diff_exit_code"
+        fi
+        echo "----------------------------------------"
+
+        # Show final bucket state (only when not dry run)
+        if [ "$DRY_RUN" = "false" ]; then
+          echo "=== Final bucket state ==="
+          gsutil ls "${GCS_BUCKET_PATH}/${POLICY_PREFIX}_*.yaml" || echo "No files found"
+          echo "----------------------------------------"
+        fi
