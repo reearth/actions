@@ -73,26 +73,6 @@ runs:
         mkdir -p /tmp/after
         cp /tmp/before/*.yaml /tmp/after/ 2>/dev/null || true
 
-        # Process deletions (files in bucket but not in local)
-        echo "=== Processing deletions ==="
-        if ls /tmp/before/${POLICY_PREFIX}_*.yaml 1>/dev/null 2>&1; then
-          for bucket_file in /tmp/before/${POLICY_PREFIX}_*.yaml; do
-            file_name=$(basename "$bucket_file")
-            if [ ! -f "${POLICIES_DIR}/$file_name" ]; then
-              echo "Will delete: $file_name"
-              rm -f "/tmp/after/$file_name"
-              if [ "$DRY_RUN" = "false" ]; then
-                if ! gsutil rm "${GCS_BUCKET_PATH}/$file_name"; then
-                  echo "Error: Failed to delete $file_name"
-                  exit 1
-                fi
-                echo "Deleted: $file_name"
-              fi
-            fi
-          done
-        fi
-        echo "----------------------------------------"
-
         # Process uploads (add/update local files)
         echo "=== Processing uploads ==="
         if ls ${POLICIES_DIR}/${POLICY_PREFIX}_*.yaml 1>/dev/null 2>&1; then
@@ -115,6 +95,26 @@ runs:
                 exit 1
               fi
               echo "Uploaded: $file_name"
+            fi
+          done
+        fi
+        echo "----------------------------------------"
+
+        # Process deletions (files in bucket but not in local)
+        echo "=== Processing deletions ==="
+        if ls /tmp/before/${POLICY_PREFIX}_*.yaml 1>/dev/null 2>&1; then
+          for bucket_file in /tmp/before/${POLICY_PREFIX}_*.yaml; do
+            file_name=$(basename "$bucket_file")
+            if [ ! -f "${POLICIES_DIR}/$file_name" ]; then
+              echo "Will delete: $file_name"
+              rm -f "/tmp/after/$file_name"
+              if [ "$DRY_RUN" = "false" ]; then
+                if ! gsutil rm "${GCS_BUCKET_PATH}/$file_name"; then
+                  echo "Error: Failed to delete $file_name"
+                  exit 1
+                fi
+                echo "Deleted: $file_name"
+              fi
             fi
           done
         fi
