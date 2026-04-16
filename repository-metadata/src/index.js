@@ -8,9 +8,13 @@ const CODEOWNERS_LOCATIONS = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNE
 async function getCodeowners(octokit, owner, repo) {
   for (const location of CODEOWNERS_LOCATIONS) {
     try {
-      const { data } = await octokit.rest.repos.getContent({ owner, repo, path: location });
-      const content = Buffer.from(data.content, "base64").toString("utf8");
-      return { content, location };
+      const { data } = await octokit.request("GET /repos/{owner}/{repo}/contents/{path}", {
+        owner,
+        repo,
+        path: location,
+        headers: { accept: "application/vnd.github.raw+json" },
+      });
+      return { content: data, location };
     } catch {
       // not found at this location, try next
     }
