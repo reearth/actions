@@ -1,0 +1,11 @@
+{
+  "name": "repository-metadata",
+  "version": "1.0.0",
+  "description": "Dump CODEOWNERS and maintainers from all repositories in an organization",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  }
+}
