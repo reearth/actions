@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const CODEOWNERS_LOCATIONS = ["CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"];
+const CONCURRENCY = 10;
 
 async function getCodeowners(octokit, owner, repo) {
   for (const location of CODEOWNERS_LOCATIONS) {
@@ -12,7 +13,10 @@ async function getCodeowners(octokit, owner, repo) {
         owner,
         repo,
         path: location,
-        headers: { accept: "application/vnd.github.raw+json" },
+        headers: {
+          accept: "application/vnd.github.raw+json",
+          "x-github-api-version": "2026-03-10",
+        },
       });
       return { content: data, location };
     } catch {
@@ -45,11 +49,31 @@ async function getMaintainers(octokit, owner, repo) {
     return { json, txt, error: null };
   } catch (err) {
     const msg = `ERROR: Cannot access collaborators for ${repo} — ${err.message}`;
-    return {
-      json: null,
-      txt: null,
-      error: msg,
-    };
+    return { json: null, txt: null, error: msg };
+  }
+}
+
+async function processRepo(octokit, owner, repo, outputDir) {
+  const [{ content: codeownersContent, location }, { json, txt, error }] = await Promise.all([
+    getCodeowners(octokit, owner, repo),
+    getMaintainers(octokit, owner, repo),
+  ]);
+
+  if (location) {
+    core.info(`[${repo}] Found CODEOWNERS at ${location}`);
+  } else {
+    core.info(`[${repo}] No CODEOWNERS file found in any standard location`);
+  }
+  fs.writeFileSync(path.join(outputDir, `${repo}.CODEOWNERS`), codeownersContent);
+
+  if (error) {
+    core.warning(`[${repo}] ${error}`);
+    fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.json`), error);
+    fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.txt`), error);
+  } else {
+    core.info(`[${repo}] Found ${json.length} maintainer(s)/admin(s)`);
+    fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.json`), JSON.stringify(json, null, 2));
+    fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.txt`), txt);
   }
 }
 
@@ -69,36 +93,12 @@ async function run() {
     per_page: 100,
   });
 
-  core.info(`Found ${repos.length} repositories.`);
+  core.info(`Found ${repos.length} repositories. Processing with concurrency=${CONCURRENCY}...`);
 
-  for (const { name: repo } of repos) {
-    core.startGroup(repo);
-
-    // CODEOWNERS
-    const { content: codeownersContent, location } = await getCodeowners(octokit, owner, repo);
-    if (location) {
-      core.info(`Found CODEOWNERS at ${location}`);
-    } else {
-      core.info(`No CODEOWNERS file found in any standard location`);
-    }
-    fs.writeFileSync(path.join(outputDir, `${repo}.CODEOWNERS`), codeownersContent);
-
-    // Maintainers
-    const { json, txt, error } = await getMaintainers(octokit, owner, repo);
-    if (error) {
-      core.warning(error);
-      fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.json`), error);
-      fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.txt`), error);
-    } else {
-      core.info(`Found ${json.length} maintainer(s)/admin(s)`);
-      fs.writeFileSync(
-        path.join(outputDir, `${repo}.MAINTAINERS.json`),
-        JSON.stringify(json, null, 2)
-      );
-      fs.writeFileSync(path.join(outputDir, `${repo}.MAINTAINERS.txt`), txt);
-    }
-
-    core.endGroup();
+  // Process in batches of CONCURRENCY to avoid hitting API rate limits
+  for (let i = 0; i < repos.length; i += CONCURRENCY) {
+    const batch = repos.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(({ name: repo }) => processRepo(octokit, owner, repo, outputDir)));
   }
 
   core.setOutput("output_dir", outputDir);
