@@ -1,0 +1,112 @@
+name: Stale Repository Audit
+description: >
+  Audit all repositories in an organization for staleness, open review issues,
+  send Slack DMs to owners, and auto-archive repos with no response after the
+  review window.
+
+inputs:
+  token:
+    description: >
+      GitHub token or GitHub App token with permissions:
+      repo (read/write), org (read), issues (write), custom properties (read/write)
+    required: true
+  owner:
+    description: "GitHub organization login. Defaults to the current repository owner."
+    required: false
+    default: ${{ github.repository_owner }}
+  name_pattern:
+    description: "Glob pattern to filter repository names (e.g. 'reearth-*'). Defaults to all repositories."
+    required: false
+    default: "*"
+  pushed_at_threshold_days:
+    description: "Number of days since last push to consider a repository stale."
+    required: false
+    default: "365"
+  workflow_run_threshold_days:
+    description: "Number of days since last workflow run to consider a repository stale (only evaluated for repos with workflows)."
+    required: false
+    default: "180"
+  response_window_days:
+    description: "Number of days owners have to respond to the staleness review issue before auto-archival."
+    required: false
+    default: "14"
+  slack_token:
+    description: >
+      Slack bot token (xoxb-...) used to send DMs to resolved owners.
+      The token must have chat:write and users:read.email scopes.
+      If omitted, Slack notifications are skipped.
+    required: false
+    default: ""
+  slack_user_map:
+    description: >
+      JSON object mapping GitHub usernames to Slack user IDs, e.g.
+      '{"alice":"U012AB3CD","bob":"U056EF7GH"}'. Used to resolve DM targets
+      without requiring email lookup.
+    required: false
+    default: "{}"
+  mode:
+    description: >
+      Execution mode:
+        scan   — detect stale repos, open issues, send Slack DMs (default)
+        archive — process repos whose review window has expired and archive them
+        full   — run scan then archive in a single pass
+    required: false
+    default: "scan"
+  dry_run:
+    description: "Set to 'true' to log all actions without creating issues, sending Slack messages, or archiving repos."
+    required: false
+    default: "false"
+  output_dir:
+    description: "Directory to write audit output files into."
+    required: false
+    default: "stale-audit"
+  engineering_leadership_team:
+    description: "GitHub team slug to assign orphan repos (no resolvable owner) to, e.g. 'engineering-leads'."
+    required: false
+    default: ""
+
+outputs:
+  output_dir:
+    description: "Path to the directory containing the generated audit files"
+    value: ${{ steps.audit.outputs.output_dir }}
+  stale_count:
+    description: "Number of stale repositories found"
+    value: ${{ steps.audit.outputs.stale_count }}
+  archived_count:
+    description: "Number of repositories archived in this run"
+    value: ${{ steps.audit.outputs.archived_count }}
+  report_file:
+    description: "Path to the JSON report file"
+    value: ${{ steps.audit.outputs.report_file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: "24"
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --production --prefer-offline
+
+    - name: Run stale repository audit
+      id: audit
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_NAME_PATTERN: ${{ inputs.name_pattern }}
+        INPUT_PUSHED_AT_THRESHOLD_DAYS: ${{ inputs.pushed_at_threshold_days }}
+        INPUT_WORKFLOW_RUN_THRESHOLD_DAYS: ${{ inputs.workflow_run_threshold_days }}
+        INPUT_RESPONSE_WINDOW_DAYS: ${{ inputs.response_window_days }}
+        INPUT_SLACK_TOKEN: ${{ inputs.slack_token }}
+        INPUT_SLACK_USER_MAP: ${{ inputs.slack_user_map }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output_dir }}
+        INPUT_ENGINEERING_LEADERSHIP_TEAM: ${{ inputs.engineering_leadership_team }}
+      run: node ${{ github.action_path }}/src/index.js
