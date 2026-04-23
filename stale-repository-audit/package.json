@@ -1,0 +1,12 @@
+{
+  "name": "stale-repository-audit",
+  "version": "1.0.0",
+  "description": "Audit all repositories in an organization for staleness and resolve ownership",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
+    "minimatch": "^10.0.1"
+  }
+}

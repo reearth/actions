@@ -1,0 +1,69 @@
+name: Stale Repository Audit
+description: Audit all repositories in an organization for staleness and resolve ownership for flagged repos
+
+inputs:
+  token:
+    description: "GitHub token or GitHub App token with repo, org read, and custom properties permissions"
+    required: true
+  owner:
+    description: "GitHub organization login. Defaults to the current repository owner."
+    required: false
+    default: ${{ github.repository_owner }}
+  name_pattern:
+    description: "Glob pattern to filter repository names (e.g. 'reearth-*'). Defaults to all repositories."
+    required: false
+    default: "*"
+  pushed_at_threshold_days:
+    description: "Number of days since last push to consider a repository stale"
+    required: false
+    default: "365"
+  workflow_run_threshold_days:
+    description: "Number of days since last workflow run to consider a repository stale (only for repos with workflows)"
+    required: false
+    default: "180"
+  output_dir:
+    description: "Directory to write audit output files into"
+    required: false
+    default: "stale-audit"
+  engineering_leadership_team:
+    description: "GitHub team slug to assign orphan repos (no resolvable owner) to, e.g. 'engineering-leads'"
+    required: false
+    default: ""
+
+outputs:
+  output_dir:
+    description: "Path to the directory containing the generated audit files"
+    value: ${{ steps.audit.outputs.output_dir }}
+  stale_count:
+    description: "Number of stale repositories found"
+    value: ${{ steps.audit.outputs.stale_count }}
+  report_file:
+    description: "Path to the JSON report file"
+    value: ${{ steps.audit.outputs.report_file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: "24"
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --production --prefer-offline
+
+    - name: Run stale repository audit
+      id: audit
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_NAME_PATTERN: ${{ inputs.name_pattern }}
+        INPUT_PUSHED_AT_THRESHOLD_DAYS: ${{ inputs.pushed_at_threshold_days }}
+        INPUT_WORKFLOW_RUN_THRESHOLD_DAYS: ${{ inputs.workflow_run_threshold_days }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output_dir }}
+        INPUT_ENGINEERING_LEADERSHIP_TEAM: ${{ inputs.engineering_leadership_team }}
+      run: node ${{ github.action_path }}/src/index.js
