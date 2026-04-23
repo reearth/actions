@@ -218,19 +218,26 @@ async function openReviewIssue(octokit, orgLogin, repoName, repoFullName, resolv
 
   if (dryRun) {
     core.info(`[${repoName}] DRY-RUN: Would open issue "${STALENESS_ISSUE_TITLE}"`);
-    return { issue: null, created: false };
+    return { issue: null, created: false, issuesDisabled: false };
   }
 
-  const { data: issue } = await octokit.rest.issues.create({
-    owner: orgLogin,
-    repo: repoName,
-    title: STALENESS_ISSUE_TITLE,
-    body,
-    labels: ["stale", "action-required"],
-  });
-
-  core.info(`[${repoName}] Opened review issue: ${issue.html_url}`);
-  return { issue, created: true };
+  try {
+    const { data: issue } = await octokit.rest.issues.create({
+      owner: orgLogin,
+      repo: repoName,
+      title: STALENESS_ISSUE_TITLE,
+      body,
+      labels: ["stale", "action-required"],
+    });
+    core.info(`[${repoName}] Opened review issue: ${issue.html_url}`);
+    return { issue, created: true, issuesDisabled: false };
+  } catch (err) {
+    if (err.status === 410 || /issues has been disabled/i.test(err.message)) {
+      core.warning(`[${repoName}] Issues are disabled — skipping issue creation`);
+      return { issue: null, created: false, issuesDisabled: true };
+    }
+    throw err;
+  }
 }
 
 // Returns true if the issue has a non-bot comment (owner responded)
@@ -306,6 +313,17 @@ function buildSlackMessage(repoFullName, issueUrl, responseWindowDays) {
     `Please respond to the issue within *${responseWindowDays} days* to keep the repository active:\n` +
     `${issueUrl}\n\n` +
     `If there is no response by the deadline, the repository will be automatically archived (read-only, not deleted).`
+  );
+}
+
+function buildSlackMessageNoIssue(repoFullName, responseWindowDays) {
+  return (
+    `:warning: *Staleness review required* for \`${repoFullName}\`\n\n` +
+    `This repository has had no significant activity in over 12 months and has been flagged for review.\n` +
+    `Issues are disabled on this repository, so no review issue could be opened.\n\n` +
+    `Please review the repository within *${responseWindowDays} days* and either re-enable issues and respond to the staleness review, ` +
+    `or confirm it should be archived: https://github.com/${repoFullName}\n\n` +
+    `If there is no action by the deadline, the repository will be automatically archived (read-only, not deleted).`
   );
 }
 
@@ -440,7 +458,7 @@ async function runScan(octokit, staleRepos, opts) {
         const { repo: repoName, full_name, resolved_owner, orphan } = entry;
 
         // Open issue
-        const { issue } = await openReviewIssue(
+        const { issue, issuesDisabled } = await openReviewIssue(
           octokit,
           orgLogin,
           repoName,
@@ -450,14 +468,18 @@ async function runScan(octokit, staleRepos, opts) {
           dryRun
         );
 
-        const issueUrl = issue?.html_url ?? `https://github.com/${full_name}/issues`;
+        // When issues are disabled we still send a Slack DM pointing at the repo
+        // directly, so the owner can decide what to do. There's no issue URL to link.
+        const issueUrl = issue?.html_url ?? (issuesDisabled ? `https://github.com/${full_name}` : null);
 
         // Slack DM
         let slackSent = false;
         if (slackToken && resolved_owner) {
           const slackUserId = await resolveSlackUserId(slackToken, resolved_owner, slackUserMap);
           if (slackUserId) {
-            const message = buildSlackMessage(full_name, issueUrl, responseWindowDays);
+            const message = issuesDisabled
+              ? buildSlackMessageNoIssue(full_name, responseWindowDays)
+              : buildSlackMessage(full_name, issueUrl, responseWindowDays);
             slackSent = await sendSlackDm(slackToken, slackUserId, message, dryRun);
           } else {
             core.warning(`[${repoName}] Could not resolve Slack user ID for GitHub login: ${resolved_owner}`);
@@ -468,10 +490,10 @@ async function runScan(octokit, staleRepos, opts) {
         if (orphan) {
           core.info(`[${repoName}] Orphan repo — archiving immediately`);
           await archiveRepo(octokit, orgLogin, repoName, "orphan", dryRun);
-          return { ...entry, issue_url: issueUrl, slack_sent: slackSent, archived: true, archive_reason: "orphan" };
+          return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, slack_sent: slackSent, archived: true, archive_reason: "orphan" };
         }
 
-        return { ...entry, issue_url: issueUrl, slack_sent: slackSent, archived: false };
+        return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, slack_sent: slackSent, archived: false };
       })
     );
     results.push(...batchResults);
@@ -494,9 +516,13 @@ async function runArchive(octokit, staleRepos, opts) {
         // Skip already-archived entries (orphans handled in scan)
         if (entry.archived) return;
 
+        // findExistingReviewIssue returns null both when issues are disabled
+        // and when no staleness issue was ever opened. Either way, there is
+        // nothing to evaluate — skip without archiving.
         const issue = await findExistingReviewIssue(octokit, orgLogin, repoName);
         if (!issue) {
-          core.info(`[${repoName}] No open review issue found — skipping archive check`);
+          const reason = entry.issues_disabled ? "issues are disabled on this repo" : "no open review issue found";
+          core.info(`[${repoName}] Skipping archive check — ${reason}`);
           return;
         }
 
