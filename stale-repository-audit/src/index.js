@@ -6,7 +6,7 @@ const { minimatch } = require("minimatch");
 
 const CONCURRENCY = 10;
 const STALENESS_ISSUE_TITLE = "Staleness review: action required";
-const API_HEADERS = { "x-github-api-version": "2022-11-28" };
+const API_HEADERS = { "x-github-api-version": "2026-03-10" };
 
 // ─── Staleness checks ────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ async function getLastWorkflowRun(octokit, owner, repo) {
       repo,
       per_page: 1,
       status: "completed",
+      headers: API_HEADERS,
     });
     if (data.workflow_runs.length === 0) return null;
     return new Date(data.workflow_runs[0].created_at);
@@ -31,6 +32,7 @@ async function hasWorkflows(octokit, owner, repo) {
       owner,
       repo,
       per_page: 1,
+      headers: API_HEADERS,
     });
     return data.total_count > 0;
   } catch {
@@ -105,7 +107,7 @@ async function getTopCommitter(octokit, owner, repo, sinceDays) {
   try {
     const commits = await octokit.paginate(
       octokit.rest.repos.listCommits,
-      { owner, repo, since: since.toISOString(), per_page: 100 },
+      { owner, repo, since: since.toISOString(), per_page: 100, headers: API_HEADERS },
       (response) => response.data
     );
     const counts = {};
@@ -122,7 +124,7 @@ async function getTopCommitter(octokit, owner, repo, sinceDays) {
 
 async function getRepoCreator(octokit, owner, repo) {
   try {
-    const { data } = await octokit.rest.repos.listCommits({ owner, repo, per_page: 1 });
+    const { data } = await octokit.rest.repos.listCommits({ owner, repo, per_page: 1, headers: API_HEADERS });
     const lastPage = await octokit.request("GET /repos/{owner}/{repo}/commits", {
       owner,
       repo,
@@ -137,6 +139,7 @@ async function getRepoCreator(octokit, owner, repo) {
         repo,
         per_page: 1,
         page: parseInt(lastPageMatch[1], 10),
+        headers: API_HEADERS,
       });
       return firstCommits[0]?.author?.login || null;
     }
@@ -200,6 +203,7 @@ async function findExistingReviewIssue(octokit, owner, repo) {
       repo,
       state: "open",
       per_page: 100,
+      headers: API_HEADERS,
     });
     return issues.find((i) => i.title === STALENESS_ISSUE_TITLE) || null;
   } catch {
@@ -228,6 +232,7 @@ async function openReviewIssue(octokit, orgLogin, repoName, repoFullName, resolv
       title: STALENESS_ISSUE_TITLE,
       body,
       labels: ["stale", "action-required"],
+      headers: API_HEADERS,
     });
     core.info(`[${repoName}] Opened review issue: ${issue.html_url}`);
     return { issue, created: true, issuesDisabled: false };
@@ -248,6 +253,7 @@ async function issueHasOwnerResponse(octokit, orgLogin, repoName, issue) {
       repo: repoName,
       issue_number: issue.number,
       per_page: 100,
+      headers: API_HEADERS,
     });
     // Any comment from a non-bot human counts as a response
     return comments.some((c) => c.user?.type !== "Bot");
@@ -337,6 +343,7 @@ async function prependArchivedBadge(octokit, orgLogin, repoName, reason, dryRun)
         owner: orgLogin,
         repo: repoName,
         path: file,
+        headers: API_HEADERS,
       });
 
       if (Array.isArray(fileData)) continue; // directory, skip
@@ -364,6 +371,7 @@ async function prependArchivedBadge(octokit, orgLogin, repoName, reason, dryRun)
         message: "chore: mark repository as archived [skip ci]",
         content: Buffer.from(newContent).toString("base64"),
         sha: fileData.sha,
+        headers: API_HEADERS,
       });
 
       core.info(`[${repoName}] Prepended archived badge to ${file}`);
@@ -382,7 +390,7 @@ async function archiveRepo(octokit, orgLogin, repoName, reason, dryRun) {
   }
 
   await Promise.all([
-    octokit.rest.repos.update({ owner: orgLogin, repo: repoName, archived: true }),
+    octokit.rest.repos.update({ owner: orgLogin, repo: repoName, archived: true, headers: API_HEADERS }),
     setCustomProperty(octokit, orgLogin, repoName, "archived_reason", reason, false),
     setCustomProperty(octokit, orgLogin, repoName, "status", "archived", false),
     prependArchivedBadge(octokit, orgLogin, repoName, reason, false),
@@ -542,12 +550,14 @@ async function runArchive(octokit, staleRepos, opts) {
               repo: repoName,
               issue_number: issue.number,
               body: "Thank you for responding. The staleness clock has been reset for another 12 months. This issue will now be closed.",
+              headers: API_HEADERS,
             });
             await octokit.rest.issues.update({
               owner: orgLogin,
               repo: repoName,
               issue_number: issue.number,
               state: "closed",
+              headers: API_HEADERS,
             });
           } else {
             core.info(`[${repoName}] DRY-RUN: Would close issue and reset staleness clock`);
@@ -595,6 +605,7 @@ async function run() {
     org: orgLogin,
     per_page: 100,
     type: "all",
+    headers: API_HEADERS,
   });
 
   const repos = namePattern === "*"
