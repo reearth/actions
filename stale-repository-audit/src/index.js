@@ -3,6 +3,51 @@ const github = require("@actions/github");
 const fs = require("fs");
 const path = require("path");
 const { minimatch } = require("minimatch");
+const yaml = require("js-yaml");
+
+// Accepts: JSON string, YAML string, or path to a .yml/.yaml file.
+// YAML file format:
+//   users:
+//     - github: alice
+//       slack: UXXXXXXXX
+function parseSlackUserMap(raw) {
+  const trimmed = (raw || "").trim();
+  if (!trimmed || trimmed === "{}") return {};
+
+  // File path input
+  if (/\.(ya?ml)$/i.test(trimmed)) {
+    const content = fs.readFileSync(trimmed, "utf8");
+    const parsed = yaml.load(content);
+    return buildMapFromYamlDoc(parsed, trimmed);
+  }
+
+  // Inline JSON
+  if (trimmed.startsWith("{")) {
+    return JSON.parse(trimmed);
+  }
+
+  // Inline YAML
+  const parsed = yaml.load(trimmed);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && !parsed.users) {
+    // Plain key:value map  { alice: UXXXXXXXX }
+    return parsed;
+  }
+  return buildMapFromYamlDoc(parsed, "<inline>");
+}
+
+function buildMapFromYamlDoc(doc, source) {
+  if (!doc || !Array.isArray(doc.users)) {
+    throw new Error(`slack_user_map: expected 'users' list in ${source}`);
+  }
+  return Object.fromEntries(
+    doc.users.map((entry) => {
+      if (!entry.github || !entry.slack) {
+        throw new Error(`slack_user_map: each entry must have 'github' and 'slack' keys`);
+      }
+      return [entry.github, entry.slack];
+    })
+  );
+}
 
 const CONCURRENCY = 10;
 const STALENESS_ISSUE_TITLE = "Staleness review: action required";
@@ -585,7 +630,7 @@ async function run() {
   const workflowRunThresholdDays = parseInt(core.getInput("workflow_run_threshold_days") || "180", 10);
   const responseWindowDays = parseInt(core.getInput("response_window_days") || "14", 10);
   const slackToken = core.getInput("slack_token") || "";
-  const slackUserMap = JSON.parse(core.getInput("slack_user_map") || "{}");
+  const slackUserMap = parseSlackUserMap(core.getInput("slack_user_map"));
   const mode = core.getInput("mode") || "scan";
   const dryRun = core.getInput("dry_run") === "true";
   const outputDir = core.getInput("output_dir") || "stale-audit";

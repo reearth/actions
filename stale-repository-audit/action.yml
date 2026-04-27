@@ -39,9 +39,15 @@ inputs:
     default: ""
   slack_user_map:
     description: >
-      JSON object mapping GitHub usernames to Slack user IDs, e.g.
-      '{"alice":"U012AB3CD","bob":"U056EF7GH"}'. Used to resolve DM targets
-      without requiring email lookup.
+      Mapping of GitHub usernames to Slack user IDs. Accepts three formats:
+      (1) JSON object: '{"alice":"U012AB3CD","bob":"U056EF7GH"}'
+      (2) Inline YAML with a 'users' list:
+            "users:\n  - github: alice\n    slack: U012AB3CD"
+      (3) Path to a .yml/.yaml file containing a 'users' list:
+            users:
+              - github: alice
+                slack: U012AB3CD
+      Used to resolve DM targets without requiring email lookup.
     required: false
     default: "{}"
   mode:
