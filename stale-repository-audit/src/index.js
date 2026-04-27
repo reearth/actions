@@ -543,10 +543,10 @@ async function runScan(octokit, staleRepos, opts) {
         if (orphan) {
           core.info(`[${repoName}] Orphan repo — archiving immediately`);
           await archiveRepo(octokit, orgLogin, repoName, "orphan", dryRun);
-          return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, slack_sent: slackSent, archived: true, archive_reason: "orphan" };
+          return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, issue_created: created, slack_sent: slackSent, archived: true, archive_reason: "orphan" };
         }
 
-        return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, slack_sent: slackSent, archived: false };
+        return { ...entry, issue_url: issueUrl, issues_disabled: issuesDisabled, issue_created: created, slack_sent: slackSent, archived: false };
       })
     );
     results.push(...batchResults);
@@ -576,6 +576,13 @@ async function runArchive(octokit, staleRepos, opts) {
         if (!issue) {
           const reason = entry.issues_disabled ? "issues are disabled on this repo" : "no open review issue found";
           core.info(`[${repoName}] Skipping archive check — ${reason}`);
+          return;
+        }
+
+        // In full mode the scan phase just opened this issue moments ago.
+        // Skip it so we don't immediately archive before the owner can respond.
+        if (entry.issue_created) {
+          core.info(`[${repoName}] Issue was just created this run — skipping archive until next run`);
           return;
         }
 
