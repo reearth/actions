@@ -1,0 +1,18 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: actions
+  namespace: reearth
+  description: Collection of actions and reusable workflows for GitHub Actions.
+  annotations:
+    github.com/project-slug: reearth/actions
+  links:
+  - url: https://github.com/reearth/actions
+    title: GitHub
+    icon: github
+  tags:
+  - javascript
+spec:
+  type: service
+  lifecycle: production
+  owner: reearth/sre
