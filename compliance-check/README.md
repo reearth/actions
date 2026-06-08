@@ -18,7 +18,7 @@ git-cascade scan --org <owner> --include-repo <repo> --config-repo eukarya-inc/c
 
 git-cascade reads the configuration from `eukarya-inc/compliance` and reads the
 target repository's contents **through the GitHub API**. It exits `1` when an
-`error`-severity rule fails (`warning`/`info` failures keep exit `0`), which
+`error`-severity rule fails (`warning`/`info` results keep exit `0`), which
 fails the workflow.
 
 > [!IMPORTANT]

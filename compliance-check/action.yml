@@ -108,5 +108,5 @@ runs:
           args+=(--output "$OUTPUT")
         fi
         # git-cascade exits 1 when any error-severity rule fails, which fails
-        # this step (and the job). warning/info failures keep exit 0.
+        # this step (and the job). warning/info results keep exit 0.
         git-cascade "${args[@]}"
