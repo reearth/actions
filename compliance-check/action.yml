@@ -1,0 +1,112 @@
+name: Compliance Check (git-cascade)
+description: >
+  Run the org-wide git-cascade compliance rules against a single repository in
+  CI and fail the job when any error-severity rule fails. Mirrors the weekly
+  eukarya-inc/compliance scan, scoped to one repository, so violations surface
+  at merge time instead of waiting for the scheduled scan.
+
+inputs:
+  app-id:
+    description: >
+      GitHub App ID (or client ID) used to mint an installation token with
+      org/repo read access. Provide this together with `private-key`. When both
+      are set, the action generates a token and ignores `token`.
+    required: false
+    default: ""
+  private-key:
+    description: "GitHub App private key (PEM) paired with `app-id`."
+    required: false
+    default: ""
+  token:
+    description: >
+      Pre-generated token to use when `app-id`/`private-key` are not provided.
+      git-cascade lists the org's repositories and reads repo contents, so the
+      token needs Organization Members: read and Repository Contents +
+      Administration: read. The default `GITHUB_TOKEN` lacks org/admin scope, so
+      rules such as branch-protection and external-collaborators will error —
+      prefer a GitHub App token for full parity with the scheduled scan.
+    required: false
+    default: ${{ github.token }}
+  owner:
+    description: "Organization login to scan. Defaults to the current repository owner."
+    required: false
+    default: ${{ github.repository_owner }}
+  repo:
+    description: >
+      Repository short name (without owner) to scan. Defaults to the current
+      repository.
+    required: false
+    default: ${{ github.event.repository.name }}
+  config-repo:
+    description: "Repository holding the git-cascade compliance config."
+    required: false
+    default: eukarya-inc/compliance
+  config-ref:
+    description: "Git ref of the config repo. Empty = the config repo's default branch."
+    required: false
+    default: ""
+  git-cascade-version:
+    description: "git-cascade release tag to install."
+    required: false
+    default: v0.11.3
+  concurrency:
+    description: "Number of concurrent (rule, repo) checks."
+    required: false
+    default: "5"
+  format:
+    description: "Output format: table, json, csv, or sarif."
+    required: false
+    default: table
+  output:
+    description: "Write results to this file instead of stdout. Empty = stdout."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate GitHub App token
+      id: app-token
+      if: ${{ inputs.app-id != '' && inputs.private-key != '' }}
+      uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+
+    - name: Install git-cascade
+      uses: jaxxstorm/action-install-gh-release@25e24d2d23ae098373794ef1d6faecb48ee52da8 # v3.0.0
+      with:
+        repo: eukarya-inc/git-cascade
+        tag: ${{ inputs.git-cascade-version }}
+
+    - name: Run compliance scan with git-cascade
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app-token.outputs.token || inputs.token }}
+        OWNER: ${{ inputs.owner }}
+        REPO: ${{ inputs.repo }}
+        CONFIG_REPO: ${{ inputs.config-repo }}
+        CONFIG_REF: ${{ inputs.config-ref }}
+        CONCURRENCY: ${{ inputs.concurrency }}
+        FORMAT: ${{ inputs.format }}
+        OUTPUT: ${{ inputs.output }}
+      run: |
+        set -euo pipefail
+        args=(
+          scan
+          --org "$OWNER"
+          --include-repo "$REPO"
+          --config-repo "$CONFIG_REPO"
+          --concurrency "$CONCURRENCY"
+          --format "$FORMAT"
+        )
+        if [ -n "$CONFIG_REF" ]; then
+          args+=(--config-ref "$CONFIG_REF")
+        fi
+        if [ -n "$OUTPUT" ]; then
+          args+=(--output "$OUTPUT")
+        fi
+        # git-cascade exits 1 when any error-severity rule fails, which fails
+        # this step (and the job). warning/info failures keep exit 0.
+        git-cascade "${args[@]}"
