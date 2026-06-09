@@ -97,7 +97,7 @@ runs:
       if: ${{ inputs.blue_green_enabled == 'false' }}
       shell: bash
     - name: Deploy to Cloud Run
-      uses: google-github-actions/deploy-cloudrun@1ec29da1351112c7904fb60454a55e3e1021a51c # v2.7.2
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
       if: ${{ inputs.blue_green_enabled == 'false' }}
       id: deploy
       with:
@@ -122,7 +122,7 @@ runs:
       if: ${{ inputs.blue_green_enabled == 'true' }}
       shell: bash
     - name: Deploy to Cloud Run Blue
-      uses: google-github-actions/deploy-cloudrun@1ec29da1351112c7904fb60454a55e3e1021a51c # v2.7.2
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
       id: deploy_blue
       if: ${{ inputs.blue_green_enabled == 'true' }}
       with:
@@ -152,7 +152,7 @@ runs:
       if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
       shell: bash
     - name: Deploy to Cloud Run Green
-      uses: google-github-actions/deploy-cloudrun@1ec29da1351112c7904fb60454a55e3e1021a51c # v2.7.2
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
       id: deploy_green
       if: ${{ inputs.blue_green_enabled == 'true' && steps.test_blue.outputs.status >= 200 && steps.test_blue.outputs.status < 300 }}
       with:
@@ -184,7 +184,7 @@ runs:
         echo "Rolling back to: ${{ steps.get_revision.outputs.revision }}"
       shell: bash
     - name: Rollback to previous version if health check fails
-      uses: google-github-actions/deploy-cloudrun@1ec29da1351112c7904fb60454a55e3e1021a51c # v2.7.2
+      uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d # v3.0.1
       id: rollback
       if: ${{ inputs.automatic_rollback_enabled == 'true' && inputs.test_url != '' && (steps.test_green.outputs.status >= 300 || steps.test_live.outputs.status >= 300) }}
       with:
