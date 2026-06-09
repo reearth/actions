@@ -1,0 +1,12 @@
+{
+  "name": "org-secret-usage-scanner",
+  "version": "1.0.0",
+  "description": "Scan all repositories in an organization for references to organization-level secrets",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0",
+    "minimatch": "^10.0.1"
+  }
+}

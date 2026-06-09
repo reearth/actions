@@ -1,0 +1,85 @@
+name: Org Secret Usage Scanner
+description: >
+  Scan every repository in an organization and report which organization-level
+  secrets are referenced from workflow files and composite action.yml files.
+  Surfaces orphaned org secrets (referenced by no repository) for cleanup.
+
+inputs:
+  token:
+    description: >
+      GitHub token or GitHub App token with permissions:
+      organization secrets (read), repository contents (read), metadata (read).
+      NOTE: the default GITHUB_TOKEN cannot list organization secrets — supply a
+      PAT (admin:org read) or a GitHub App installation token with the
+      "Organization secrets: read-only" permission.
+    required: true
+  owner:
+    description: "GitHub organization login to scan. Defaults to the current repository owner."
+    required: false
+    default: ${{ github.repository_owner }}
+  name_pattern:
+    description: "Glob pattern to filter repository names (e.g. 'reearth-*'). Defaults to all repositories."
+    required: false
+    default: "*"
+  repo_visibility:
+    description: "Which repositories to enumerate: all | public | private."
+    required: false
+    default: "all"
+  include_archived:
+    description: "Set to 'true' to also scan archived repositories."
+    required: false
+    default: "false"
+  fail_on_orphans:
+    description: >
+      Set to 'true' to exit non-zero when one or more org secrets are referenced
+      by no repository (useful as a secret-hygiene CI gate).
+    required: false
+    default: "false"
+  output_dir:
+    description: "Directory to write the report files into."
+    required: false
+    default: "org-secret-scan"
+
+outputs:
+  output_dir:
+    description: "Path to the directory containing the generated report files."
+    value: ${{ steps.scan.outputs.output_dir }}
+  report_file:
+    description: "Path to the JSON report file."
+    value: ${{ steps.scan.outputs.report_file }}
+  secrets_total:
+    description: "Number of organization-level secrets discovered."
+    value: ${{ steps.scan.outputs.secrets_total }}
+  secrets_used:
+    description: "Number of org secrets referenced by at least one repository."
+    value: ${{ steps.scan.outputs.secrets_used }}
+  secrets_orphaned:
+    description: "Number of org secrets referenced by no repository."
+    value: ${{ steps.scan.outputs.secrets_orphaned }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      with:
+        node-version: "24"
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm install --production --prefer-offline
+
+    - name: Run org secret usage scan
+      id: scan
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_OWNER: ${{ inputs.owner }}
+        INPUT_NAME_PATTERN: ${{ inputs.name_pattern }}
+        INPUT_REPO_VISIBILITY: ${{ inputs.repo_visibility }}
+        INPUT_INCLUDE_ARCHIVED: ${{ inputs.include_archived }}
+        INPUT_FAIL_ON_ORPHANS: ${{ inputs.fail_on_orphans }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output_dir }}
+      run: node ${{ github.action_path }}/src/index.js
