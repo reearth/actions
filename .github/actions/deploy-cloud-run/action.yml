@@ -1,0 +1,81 @@
+name: Deploy Cloud Run service
+description: Create a new revision and rollback if health check fails
+inputs:
+  region:
+    description: Region of the Cloud Run service
+    required: true
+  image:
+    description: Image name
+    required: true
+  service:
+    description: Name of the Cloud Run service
+    required: true
+  health_check_url:
+    description: Health check URL. Multiple URLs can be separated by line breaks. If not provided, health check will be skipped.
+
+runs:
+  using: composite
+  steps:
+    - name: Get current revision
+      id: get_revision
+      shell: bash
+      run: |
+        REV=$( \
+          gcloud run services describe "${{ inputs.service }}" \
+            --region "${{ inputs.region }}" \
+            --format="value(status.latestReadyRevisionName)" \
+        )
+        echo "Current revision: $REV"
+        echo "revision=$REV" >> "$GITHUB_OUTPUT"
+
+    - name: Deploy
+      shell: bash
+      run: |
+        gcloud run deploy "${{ inputs.service }}" \
+          --image "${{ inputs.image }}" \
+          --region "${{ inputs.region }}" \
+          --platform managed \
+          --quiet
+
+    # ensure that the traffic is updated to the latest revision always
+    - name: Update traffic
+      shell: bash
+      run: |
+        gcloud run services update-traffic "${{ inputs.service }}" \
+          --to-latest \
+          --region "${{ inputs.region }}"
+
+    # if the URL is invalid, curl itself will return an error code
+    - name: Health check
+      id: health_check
+      if: ${{ inputs.health_check_url }}
+      shell: bash
+      run: |
+        for url in ${{ inputs.health_check_url }}; do
+          echo "Checking health of $url"
+          RESULT=`curl -m 10 -s -o /dev/null -w "%{http_code}" "$url"`
+          echo "Status code is $RESULT"
+          if [ $RESULT -ge 300 ]; then
+            echo "Health check failed"
+            echo "error=true" >> "$GITHUB_OUTPUT"
+            break
+          fi
+        done
+
+    - name: Rollback
+      if: ${{ steps.health_check.outputs.error && steps.get_revision.outputs.revision }}
+      shell: bash
+      run: |
+        gcloud run services update-traffic "${{ inputs.service }}" \
+          --to-revision="${{ steps.get_revision.outputs.revision }}" \
+          --region "${{ inputs.region }}"
+
+    - name: Finish
+      shell: bash
+      run: |
+        if [ -z "${{ steps.health_check.outputs.error }}" ]; then
+          echo "Deployment successful"
+        else
+          echo "Deployment failed"
+          exit 1
+        fi
