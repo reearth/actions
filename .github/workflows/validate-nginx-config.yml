@@ -64,7 +64,7 @@ jobs:
           curl -s -O https://raw.githubusercontent.com/nginxinc/docker-nginx/2879b26c7dedf1d958b1894a5c1b1dec3c026369/entrypoint/20-envsubst-on-templates.sh
           chmod +x 20-envsubst-on-templates.sh
       - name: envsubst Nginx config
-        run: sudo --preserve-env ./20-envsubst-on-templates.sh
+        run: sudo --preserve-env=NGINX_ENVSUBST_TEMPLATE_DIR,NGINX_ENVSUBST_OUTPUT_DIR,NGINX_ENVSUBST_TEMPLATE_SUFFIX,NGINX_ENVSUBST_FILTER ./20-envsubst-on-templates.sh
       - name: check generated config files
         run: ls -l /etc/nginx/conf.d/
         if: ${{ inputs.verbose }}
