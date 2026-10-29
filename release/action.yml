@@ -23,7 +23,7 @@ runs:
         fetch-depth: 0
     - id: changelog
       name: Generate CHANGELOG
-      uses: reearth/changelog-action@7b6b8d8c8b6a9d8c8b6a9d8c8b6a9d8c8b6a9d8c # main
+      uses: reearth/changelog-action@cd9d00f467a683c3c9996c1574cfa42d60968dc5 # main
       with:
         version: ${{ github.event.inputs.version }}
         repo: ${{ github.repository }}
